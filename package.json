@@ -1,0 +1,28 @@
+{
+  "name": "project-shrink-server",
+  "version": "1.0.0",
+  "description": "Game server for Project Shrink",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.24.4",
+    "pg": "^8.23.0",
+    "pg-hstore": "^2.3.4",
+    "redis": "^6.2.1",
+    "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
