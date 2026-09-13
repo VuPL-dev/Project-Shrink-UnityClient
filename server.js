@@ -14,15 +14,24 @@ app.use(cors()); // CORS middleware
 app.use(express.json()); // JSON parser middleware
 app.use(express.urlencoded({ extended: true }));
 
+// Routes
+const userRoutes = require('./routes/userRoutes');
+
 // Basic route
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Project Shrink Server is running!' });
 });
 
+// API Routes mounting
+app.use('/api/users', userRoutes);
+
 // Error Handling Middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong on the server!' });
+  res.status(err.status || 500).json({ 
+    success: false, 
+    error: err.message || 'Something went wrong on the server!' 
+  });
 });
 
 const PORT = process.env.PORT || 3000;
