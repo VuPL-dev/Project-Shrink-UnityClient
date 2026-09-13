@@ -1,6 +1,7 @@
 const { sequelize } = require('../../config/postgres');
 const User = require('./User');
-// Require other PG models here when created
+const Transaction = require('./Transaction');
+const GameConfig = require('./GameConfig');
 
 const syncDatabase = async () => {
   try {
@@ -14,5 +15,7 @@ const syncDatabase = async () => {
 
 module.exports = {
   User,
+  Transaction,
+  GameConfig,
   syncDatabase
 };
