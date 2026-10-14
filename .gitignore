@@ -6,10 +6,36 @@ sysinfo.txt
 *.aab
 *.unitypackage
 
+# Node & Backend dependencies
+node_modules/
+.env
+.env.*
+.postman/
+postman/
+TAILIEU/extracted_excel/
+
 # Bỏ qua thư mục Sever hoàn toàn
 Sever/
 
 # Các thư mục tạm và cache của Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+.vs/
+.idea/
+.gradle/
+.vsconfig
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.userprefs
+
 ProjectShrink/[Ll]ibrary/
 ProjectShrink/[Tt]emp/
 ProjectShrink/[Oo]bj/
