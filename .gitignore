@@ -12,7 +12,10 @@ node_modules/
 .env.*
 .postman/
 postman/
-TAILIEU/extracted_excel/
+# Local backup / scenes game & dulieu
+dulieu/
+scenes game/
+"scenes game/"
 
 # Bỏ qua thư mục Sever hoàn toàn
 Sever/
