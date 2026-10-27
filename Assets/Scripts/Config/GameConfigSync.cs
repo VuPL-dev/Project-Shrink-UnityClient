@@ -46,6 +46,14 @@ namespace ProjectShrink.Config
             public float hearingRadius = 8.0f;
         }
 
+        [System.Serializable]
+        private class ApiResponseWrapper
+        {
+            public string status;
+            public string message;
+            public GameAttributesData data;
+        }
+
         void Start()
         {
             if (syncOnStart)
@@ -78,8 +86,24 @@ namespace ProjectShrink.Config
                     string json = request.downloadHandler.text;
                     try
                     {
-                        // Parse JSON từ Web
-                        JsonUtility.FromJsonOverwrite(json, currentAttributes);
+                        // Hỗ trợ cả JSON bọc { data: ... } lẫn JSON phẳng
+                        if (json.Contains("\"data\""))
+                        {
+                            ApiResponseWrapper wrapper = JsonUtility.FromJson<ApiResponseWrapper>(json);
+                            if (wrapper != null && wrapper.data != null)
+                            {
+                                currentAttributes = wrapper.data;
+                            }
+                            else
+                            {
+                                JsonUtility.FromJsonOverwrite(json, currentAttributes);
+                            }
+                        }
+                        else
+                        {
+                            JsonUtility.FromJsonOverwrite(json, currentAttributes);
+                        }
+
                         ApplyAttributesToEntities(currentAttributes);
                         isSuccess = true;
                         lastSyncMessage = $"Đồng bộ thành công lúc {DateTime.Now:HH:mm:ss}!";

@@ -83,3 +83,4 @@ ProjectShrink/Assets/**/*.jpeg
 
 # NGOẠI LỆ QUAN TRỌNG: LUÔN GIỮ LẠI FILE .META CỦA TẤT CẢ ASSETS
 !ProjectShrink/Assets/**/*.meta
+ProjectShrink/Assets/Stylized Ant Character/
