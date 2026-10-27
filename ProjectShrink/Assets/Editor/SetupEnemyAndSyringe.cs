@@ -74,10 +74,11 @@ public class SetupEnemyAndSyringe
         // Gắn Script nhặt đồ ItemPickup
         ItemPickup pickup = syringeInstance.GetComponent<ItemPickup>();
         if (pickup == null) pickup = syringeInstance.AddComponent<ItemPickup>();
-        pickup.itemType = ItemPickup.ItemType.Health;
-        pickup.healAmount = 30f;
-        pickup.enableFloating = true;
-        pickup.floatAmplitude = 0.012f;
+        pickup.itemId = "health_syringe";
+        pickup.itemName = "Health Syringe";
+        pickup.quantity = 1;
+        // pickup.enableFloating = true;
+        pickup.hoverHeight = 0.012f;
         pickup.rotationSpeed = 65f;
 
         // Lưu thành Prefab tái sử dụng
@@ -172,17 +173,17 @@ public class SetupEnemyAndSyringe
             Undo.RegisterCreatedObjectUndo(beetleInstance, "Place Enemy_Beetle");
         }
 
-        // 4. Gắn Tag "Player" và thêm InventoryManager cho player_v2
+        // 4. Gắn Tag "Player" và thêm InventoryNetworkManager cho player_v2
         GameObject playerObj = GameObject.Find("player_v2");
         if (playerObj != null)
         {
             playerObj.tag = "Player";
-            InventoryManager inv = playerObj.GetComponent<InventoryManager>();
+            InventoryNetworkManager inv = playerObj.GetComponent<InventoryNetworkManager>();
             if (inv == null)
             {
-                inv = playerObj.AddComponent<InventoryManager>();
+                inv = playerObj.AddComponent<InventoryNetworkManager>();
             }
-            Debug.Log("✅ Đã đặt Tag 'Player' và gắn InventoryManager cho player_v2");
+            Debug.Log("✅ Đã đặt Tag 'Player' và gắn InventoryNetworkManager cho player_v2");
         }
 
         // 5. Lưu Scene
