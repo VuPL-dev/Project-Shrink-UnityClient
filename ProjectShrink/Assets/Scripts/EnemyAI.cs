@@ -21,14 +21,14 @@ public class EnemyAI : MonoBehaviour
     public float maxHealth = 50f;
     public float currentHealth = 50f;
     [Tooltip("Tốc độ bò tuần tra")]
-    public float patrolSpeed = 0.15f;
+    public float patrolSpeed = 0.18f;
     [Tooltip("Tốc độ bò rượt đuổi người chơi")]
-    public float chaseSpeed = 0.32f;
-    public float rotationSpeed = 5f;
+    public float chaseSpeed = 0.45f;
+    public float rotationSpeed = 6f;
     public float attackDamage = 15f;
     [Tooltip("Khoảng cách chạm sát vào người chơi để cắn (mét)")]
-    public float attackRange = 0.16f;
-    public float attackCooldown = 1.5f;
+    public float attackRange = 0.22f;
+    public float attackCooldown = 1.4f;
 
     // Tương thích ngược với các Editor Script cũ
     public float moveSpeed { get => patrolSpeed; set => patrolSpeed = value; }
@@ -36,16 +36,16 @@ public class EnemyAI : MonoBehaviour
 
     [Header("2. Cảm Biến Thị Giác (Vision Sensor)")]
     [Tooltip("Bán kính tầm nhìn (mét) - Quét 1/4 căn phòng (~0.7m)")]
-    public float viewRadius = 0.70f;
+    public float viewRadius = 2.2f;
     [Range(0, 360)]
     [Tooltip("Góc quét hình nón FOV (độ) - Góc nhìn tập trung phía trước")]
-    public float viewAngle = 65f;
+    public float viewAngle = 85f;
     [Tooltip("Layer vật cản che khuất tầm nhìn (Tường, Cửa)")]
     public LayerMask obstacleMask;
 
     [Header("3. Cảm Biến Thính Giác (Hearing Sensor)")]
     [Tooltip("Bán kính tai nghe tiếng chạy")]
-    public float hearingRadius = 1.1f;
+    public float hearingRadius = 2.5f;
     [Tooltip("Thời gian cảnh giác điều tra âm thanh (giây)")]
     public float alertInvestigateDuration = 3.0f;
 
@@ -102,8 +102,43 @@ public class EnemyAI : MonoBehaviour
         mainCamera = Camera.main;
     }
 
+    
+    public void EnsureTargetPlayer()
+    {
+        if (targetPlayer == null || !targetPlayer.gameObject.activeInHierarchy)
+        {
+            GameObject p2 = GameObject.Find("player_v2");
+            if (p2 != null && p2.activeInHierarchy)
+            {
+                targetPlayer = p2.transform;
+                return;
+            }
+
+            GameObject pTag = GameObject.FindWithTag("Player");
+            if (pTag != null && pTag.activeInHierarchy)
+            {
+                targetPlayer = pTag.transform;
+                return;
+            }
+
+            PlayerController[] allPlayers = FindObjectsByType<PlayerController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            if (allPlayers.Length > 0)
+            {
+                targetPlayer = allPlayers[0].transform;
+            }
+        }
+    }
+
     void Start()
     {
+        EnsureTargetPlayer();
+        if (viewRadius < 1.5f) viewRadius = 2.2f;
+        if (viewAngle < 80f) viewAngle = 85f;
+        if (hearingRadius < 2.0f) hearingRadius = 2.5f;
+        if (chaseSpeed < 0.40f) chaseSpeed = 0.45f;
+        if (patrolSpeed < 0.16f) patrolSpeed = 0.18f;
+        if (attackRange < 0.20f) attackRange = 0.22f;
+
         // Tự động tìm nhân vật trong Scene nếu chưa gán
         if (targetPlayer == null)
         {
@@ -154,6 +189,7 @@ public class EnemyAI : MonoBehaviour
     void Update()
     {
         if (currentState == EnemyState.Dead) return;
+        EnsureTargetPlayer();
 
         if (targetPlayer == null)
         {
@@ -199,6 +235,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (playerSeen)
         {
+            Debug.Log($"👁️ [{name}] Nhìn thấy người chơi! Bắt đầu đuổi theo (Chase)!");
             ChangeState(EnemyState.Chase);
             return;
         }
@@ -215,6 +252,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (playerSeen)
         {
+            Debug.Log($"👁️ [{name}] Nhìn thấy người chơi khi đang tuần tra! Bắt đầu đuổi theo (Chase)!");
             ChangeState(EnemyState.Chase);
             return;
         }
