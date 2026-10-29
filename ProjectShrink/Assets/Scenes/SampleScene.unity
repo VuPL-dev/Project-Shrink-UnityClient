@@ -1784,7 +1784,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 847934699}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7d0e8739fb2e6e74da3a3f33ec942e5b, type: 3}
   m_Name: 
@@ -1793,7 +1793,7 @@ MonoBehaviour:
   customItemId: 
   healAmount: 30
   requireConfirmation: 1
-  pickupRange: 1.2
+  pickupRange: 0.35
   enableFloating: 1
   floatAmplitude: 0.012
   floatSpeed: 3
@@ -2448,7 +2448,7 @@ Transform:
   m_GameObject: {fileID: 1283556685}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.82, y: 0.06, z: 0.05}
+  m_LocalPosition: {x: 1.82, y: 0.06, z: 0.45}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2492,7 +2492,7 @@ MonoBehaviour:
   customItemId: spider_silk
   healAmount: 0
   requireConfirmation: 1
-  pickupRange: 1.2
+  pickupRange: 0.35
   enableFloating: 1
   floatAmplitude: 0.008
   floatSpeed: 3
@@ -3450,19 +3450,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.48
+      value:  1.2
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.05
+      value:  0.046889
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.52
+      value:  2.2
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.17364824
+      value:  1
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalRotation.x
@@ -3470,7 +3470,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0.9848078
+      value:  0
       objectReference: {fileID: 0}
     - target: {fileID: 482547193925635823, guid: 00b286560eaefde47802ef4271efe745, type: 3}
       propertyPath: m_LocalRotation.z

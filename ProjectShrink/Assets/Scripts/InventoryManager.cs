@@ -508,7 +508,7 @@ public class InventoryManager : MonoBehaviour
         ItemModelFactory.BakeAllIcons();
 
         // Cấp phát nguyên liệu chế tạo khởi đầu cho người chơi để test thuận tiện
-        GiveStarterMaterialsForTesting();
+        // GiveStarterMaterialsForTesting(); // Tắt tự động phát đồ để túi đồ sạch
 
         // Tải dữ liệu game từ server (items, recipes, chỉ số nhân vật/quái)
         // Không làm ảnh hưởng gameplay nếu server offline - dùng hard-code fallback
