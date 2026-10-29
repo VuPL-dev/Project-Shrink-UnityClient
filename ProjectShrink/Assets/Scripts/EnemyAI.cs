@@ -123,17 +123,19 @@ public class EnemyAI : MonoBehaviour
         if (InventoryManager.ServerEnemyCache != null)
         {
             string searchType = (species == Species.Beetle) ? "beetle" : "ant";
-            var info = InventoryManager.ServerEnemyCache.Find(e =>
-                (!string.IsNullOrEmpty(e.type) && e.type.ToLower().Contains(searchType)) ||
-                (!string.IsNullOrEmpty(e.name) && e.name.ToLower().Contains(searchType))
-            );
-
-            if (info != null)
+            foreach (var kvp in InventoryManager.ServerEnemyCache)
             {
-                if (info.maxHp > 0f) { maxHealth = info.maxHp; currentHealth = maxHealth; }
-                if (info.damage > 0f) attackDamage = info.damage;
-                if (info.speed > 0f) { patrolSpeed = info.speed; chaseSpeed = info.speed * 2f; }
-                Debug.Log($"🌐 [{enemyName}] Đã áp dụng cấu hình Server: HP={maxHealth}, DMG={attackDamage}, Speed={patrolSpeed}");
+                var info = kvp.Value;
+                if (info != null && !string.IsNullOrEmpty(info.enemyId) && info.enemyId.ToLower().Contains(searchType))
+                {
+                    if (info.hp > 0f) { maxHealth = info.hp; currentHealth = maxHealth; }
+                    if (info.damage > 0f) attackDamage = info.damage;
+                    if (info.speed > 0f) { patrolSpeed = info.speed; chaseSpeed = info.speed * 2f; }
+                    if (info.attackRange > 0f) attackRange = info.attackRange;
+                    if (info.detectionRange > 0f) viewRadius = info.detectionRange;
+                    Debug.Log($"🌐 [{enemyName}] Đã áp dụng cấu hình Server: HP={maxHealth}, DMG={attackDamage}, Speed={patrolSpeed}");
+                    break;
+                }
             }
         }
     }
@@ -242,7 +244,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (targetPlayer == null || !targetPlayer.gameObject.activeInHierarchy)
         {
-            PlayerController localPC = PlayerController.LocalInstance;
+            PlayerController localPC = PlayerController.Instance;
             if (localPC != null && localPC.gameObject.activeInHierarchy)
             {
                 targetPlayer = localPC.transform;
