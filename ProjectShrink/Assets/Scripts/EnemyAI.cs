@@ -43,9 +43,20 @@ public class EnemyAI : MonoBehaviour
     public float moveSpeed { get => patrolSpeed; set => patrolSpeed = value; }
     public float detectionRange { get => viewRadius; set => viewRadius = value; }
     public float minStopDistance = 0.085f;
+        [Header("1.5. Cấu Hình Thanh Máu (Health Bar Settings)")]
+    [Tooltip("Bật/tắt thanh máu nổi trên đầu quái")]
     public bool showHealthBar = true;
-    public float healthBarVisibleDistance = 0.65f;
-    public float healthBarHeightOffset = 0.058f;
+    [Tooltip("Độ cao của thanh máu trên đầu quái (mét) - Tăng giảm để thanh máu cao hơn")]
+    public float healthBarHeightOffset = 0.075f;
+    [Tooltip("Chiều rộng thanh máu trên đầu (pixel)")]
+    public float healthBarWidth = 140f;
+    [Tooltip("Chiều cao thanh máu trên đầu (pixel)")]
+    public float healthBarHeight = 14f;
+    [Tooltip("Bật thanh máu mục tiêu to rõ ở đỉnh màn hình")]
+    public bool showTopScreenHealthBar = true;
+    [Tooltip("Luôn hiển thị thanh máu đỉnh màn hình kể cả khi chưa chạm trán")]
+    public bool alwaysShowTopBar = true;
+    public float healthBarVisibleDistance = 20.0f;
     public float minEnemySeparation = 0.085f;
 
     [Header("2. Cảm Biến Thị Giác (Vision Sensor)")]
@@ -647,72 +658,129 @@ public class EnemyAI : MonoBehaviour
     }
     #endregion
 
-    #region GUI Health Bar & Combat Text
+        #region GUI Health Bar & Combat Text
     void OnGUI()
     {
         if (currentState == EnemyState.Dead) return;
 
-        if (mainCamera == null) mainCamera = Camera.main;
-        if (mainCamera == null) return;
-
-        // Tọa độ trên lưng/đầu quái vật (0.058m trong tỉ lệ thu nhỏ)
-        Vector3 headPos = transform.position + Vector3.up * 0.058f;
-        Vector3 screenPos = mainCamera.WorldToScreenPoint(headPos);
-
-        // Nếu nằm phía sau camera thì không vẽ
-        if (screenPos.z <= 0) return;
-
-        // Kích thước to rõ, dễ nhìn
-        float width = 110f;
-        float height = 11f;
-        float x = screenPos.x - width * 0.5f;
-        float y = Screen.height - screenPos.y - height;
-
-        // 1. Viền ngoài đen đậm có độ dày
-        GUI.color = new Color(0f, 0f, 0f, 0.9f);
-        GUI.DrawTexture(new Rect(x - 2, y - 2, width + 4, height + 4), Texture2D.whiteTexture);
-
-        // 2. Nền thanh tối
-        GUI.color = new Color(0.12f, 0.12f, 0.14f, 0.95f);
-        GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
-
-        // 3. Thanh máu màu đỏ tươi / cam rực rỡ
+        // Cập nhật tỷ lệ máu mượt mà
         displayedHealthRatio = Mathf.Lerp(displayedHealthRatio, Mathf.Clamp01(currentHealth / maxHealth), 10f * Time.deltaTime);
-        float barFill = displayedHealthRatio * width;
         Color hpColor = (displayedHealthRatio > 0.4f) ? new Color(0.95f, 0.25f, 0.2f, 1f) : new Color(1f, 0.1f, 0.1f, 1f);
-        GUI.color = hpColor;
-        GUI.DrawTexture(new Rect(x, y, barFill, height), Texture2D.whiteTexture);
 
-        // 4. Nhãn tên và chỉ số máu hiển thị sắc nét phía trên thanh
-        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        // -------------------------------------------------------------
+        // A. THANH MÁU MỤC TIÊU Ở ĐỈNH MÀN HÌNH (TOP-CENTER HUD BAR)
+        // -------------------------------------------------------------
+        bool inCombat = (currentState == EnemyState.Chase || currentState == EnemyState.Attack || (Time.time - lastDamageTextTime < 6.0f));
+        if (showTopScreenHealthBar && (alwaysShowTopBar || inCombat))
         {
-            alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold,
-            fontSize = 11
-        };
+            float topW = 340f;
+            float topH = 20f;
+            float topX = (Screen.width - topW) * 0.5f;
+            float topY = 28f;
 
-        // Đổ bóng chữ đen
-        labelStyle.normal.textColor = Color.black;
-        GUI.Label(new Rect(x, y - 18, width, 16), $"🐜 {enemyName}: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
-        // Chữ trắng nổi bật
-        labelStyle.normal.textColor = (currentHealth < 20f) ? Color.yellow : Color.white;
-        GUI.Label(new Rect(x - 1, y - 19, width, 16), $"🐜 {enemyName}: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
+            // 1. Viền ngoài đen đậm
+            GUI.color = new Color(0f, 0f, 0f, 0.95f);
+            GUI.DrawTexture(new Rect(topX - 3, topY - 3, topW + 6, topH + 6), Texture2D.whiteTexture);
 
-        // 5. Hiệu ứng UI sát thương / tấn công nổi (Damage Popup)
-        if (Time.time - lastDamageTextTime < 1.35f && !string.IsNullOrEmpty(lastDamageText))
-        {
-            float elapsed = Time.time - lastDamageTextTime;
-            float floatY = y - 36f - (elapsed * 24f);
-            GUIStyle combatStyle = new GUIStyle(GUI.skin.label)
+            // 2. Nền tối
+            GUI.color = new Color(0.12f, 0.13f, 0.16f, 0.95f);
+            GUI.DrawTexture(new Rect(topX, topY, topW, topH), Texture2D.whiteTexture);
+
+            // 3. Thanh máu đổ đầy
+            float topFill = displayedHealthRatio * topW;
+            GUI.color = hpColor;
+            GUI.DrawTexture(new Rect(topX, topY, topFill, topH), Texture2D.whiteTexture);
+
+            // 4. Nhãn tên và chỉ số máu hiển thị to rõ
+            GUIStyle topStyle = new GUIStyle(GUI.skin.label)
             {
                 alignment = TextAnchor.MiddleCenter,
                 fontStyle = FontStyle.Bold,
-                fontSize = 14
+                fontSize = 13
             };
-            combatStyle.normal.textColor = Color.black;
-            GUI.Label(new Rect(x - 45f + 1, floatY + 1, width + 90f, 22f), lastDamageText, combatStyle);
-            combatStyle.normal.textColor = lastDamageColor;
-            GUI.Label(new Rect(x - 45f, floatY, width + 90f, 22f), lastDamageText, combatStyle);
+
+            string statusText = (currentState == EnemyState.Patrol) ? "Tuần tra" : ((currentState == EnemyState.Chase) ? "Rượt đuổi" : ((currentState == EnemyState.Attack) ? "Tấn công" : "Cảnh giác"));
+            string hpString = $"🐜 {enemyName.ToUpper()}  [{statusText}]  —  {Mathf.CeilToInt(currentHealth)} / {Mathf.CeilToInt(maxHealth)} HP";
+
+            topStyle.normal.textColor = Color.black;
+            GUI.Label(new Rect(topX, topY - 22, topW, 20), hpString, topStyle);
+            topStyle.normal.textColor = Color.yellow;
+            GUI.Label(new Rect(topX - 1, topY - 23, topW, 20), hpString, topStyle);
+        }
+
+        // -------------------------------------------------------------
+        // B. THANH MÁU NỔI TRÊN ĐẦU QUÁI VẬT (OVERHEAD FLOATING BAR)
+        // -------------------------------------------------------------
+        if (showHealthBar)
+        {
+            if (mainCamera == null) mainCamera = Camera.main;
+            if (mainCamera != null)
+            {
+                Vector3 headPos = transform.position + Vector3.up * healthBarHeightOffset;
+                Vector3 screenPos = mainCamera.WorldToScreenPoint(headPos);
+
+                // Chỉ vẽ khi nằm trong khung nhìn camera phía trước
+                if (screenPos.z > 0 && screenPos.x >= -80 && screenPos.x <= Screen.width + 80)
+                {
+                    float width = healthBarWidth;
+                    float height = healthBarHeight;
+                    float x = screenPos.x - width * 0.5f;
+                    float y = Screen.height - screenPos.y - height;
+
+                    // 1. Viền ngoài đen đậm có độ dày
+                    GUI.color = new Color(0f, 0f, 0f, 0.95f);
+                    GUI.DrawTexture(new Rect(x - 2, y - 2, width + 4, height + 4), Texture2D.whiteTexture);
+
+                    // 2. Nền thanh tối
+                    GUI.color = new Color(0.12f, 0.12f, 0.15f, 0.95f);
+                    GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
+
+                    // 3. Thanh máu màu đỏ tươi / cam rực rỡ
+                    float barFill = displayedHealthRatio * width;
+                    GUI.color = hpColor;
+                    GUI.DrawTexture(new Rect(x, y, barFill, height), Texture2D.whiteTexture);
+
+                    // 4. Nhãn tên và chỉ số máu hiển thị sắc nét phía trên thanh
+                    GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontStyle = FontStyle.Bold,
+                        fontSize = 11
+                    };
+
+                    labelStyle.normal.textColor = Color.black;
+                    GUI.Label(new Rect(x, y - 18, width, 16), $"🐜 {enemyName}: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
+                    labelStyle.normal.textColor = (currentHealth < 20f) ? Color.yellow : Color.white;
+                    GUI.Label(new Rect(x - 1, y - 19, width, 16), $"🐜 {enemyName}: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
+
+                    // 5. Mũi tên tam giác vàng chỉ thẳng vào đỉnh đầu quái
+                    GUIStyle arrowStyle = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontStyle = FontStyle.Bold,
+                        fontSize = 11
+                    };
+                    arrowStyle.normal.textColor = Color.yellow;
+                    GUI.Label(new Rect(screenPos.x - 10, y + height, 20, 14), "▼", arrowStyle);
+
+                    // 6. Hiệu ứng UI sát thương / tấn công nổi (Damage Popup)
+                    if (Time.time - lastDamageTextTime < 1.35f && !string.IsNullOrEmpty(lastDamageText))
+                    {
+                        float elapsed = Time.time - lastDamageTextTime;
+                        float floatY = y - 36f - (elapsed * 24f);
+                        GUIStyle combatStyle = new GUIStyle(GUI.skin.label)
+                        {
+                            alignment = TextAnchor.MiddleCenter,
+                            fontStyle = FontStyle.Bold,
+                            fontSize = 15
+                        };
+                        combatStyle.normal.textColor = Color.black;
+                        GUI.Label(new Rect(x - 45f + 1, floatY + 1, width + 90f, 22f), lastDamageText, combatStyle);
+                        combatStyle.normal.textColor = lastDamageColor;
+                        GUI.Label(new Rect(x - 45f, floatY, width + 90f, 22f), lastDamageText, combatStyle);
+                    }
+                }
+            }
         }
 
         GUI.color = Color.white;
