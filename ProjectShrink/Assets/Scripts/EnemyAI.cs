@@ -113,13 +113,13 @@ public class EnemyAI : MonoBehaviour
             ActiveEnemies.Add(this);
 
         // Đăng ký nhận sóng âm thanh toàn cục (Hearing Sensor)
-        SoundEmitter.OnSoundEmitted += HandleSoundHeard;
+        SoundEmitter.OnSoundTypeEmitted += HandleSoundHeard;
     }
 
     void OnDisable()
     {
         ActiveEnemies.Remove(this);
-        SoundEmitter.OnSoundEmitted -= HandleSoundHeard;
+        SoundEmitter.OnSoundTypeEmitted -= HandleSoundHeard;
     }
 
     public void EnsureTargetPlayer()
