@@ -124,6 +124,17 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // 0. Khi đang mở Túi đồ hoặc Bàn chế tạo, tạm dừng di chuyển và đòn đánh để dùng chuột
+        if (InventoryManager.Instance != null && InventoryManager.Instance.isInventoryOpen)
+        {
+            currentMoveVelocity = Vector3.zero;
+            if (animator != null)
+            {
+                animator.SetFloat(HashSpeed, 0f);
+            }
+            return;
+        }
+
         // 1. Xử lý Né Đòn (Dodge / Roll) bằng phím LeftShift
         HandleDodge();
 
@@ -321,7 +332,7 @@ public class PlayerController : MonoBehaviour
         {
             TriggerAttack(HashHook, 0.45f, 18f);
         }
-        else if (Input.GetKeyDown(KeyCode.L) || Input.GetKeyDown(KeyCode.E))
+        else if (Input.GetKeyDown(KeyCode.L))
         {
             TriggerAttack(HashKick, 0.50f, 20f);
         }

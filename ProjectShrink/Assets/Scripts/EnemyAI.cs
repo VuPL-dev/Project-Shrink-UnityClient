@@ -539,13 +539,19 @@ public class EnemyAI : MonoBehaviour
             animator.SetTrigger("die");
         }
 
-        // Rơi vật phẩm HealthSyringe
+        // Rơi vật phẩm khi quái chết
+        Vector3 dropPos = transform.position + Vector3.up * dropYOffset;
         if (dropItemPrefab != null)
         {
-            Vector3 dropPos = transform.position + Vector3.up * dropYOffset;
             GameObject dropped = Instantiate(dropItemPrefab, dropPos, Quaternion.identity);
             dropped.name = "HealthSyringe_Dropped";
             Debug.Log($"🎁 Rơi vật phẩm tại: {dropPos}");
+        }
+        else
+        {
+            string dropId = (species == Species.Ant) ? "long_bone" : "spider_silk";
+            ItemPickup.CreateWorldDropById(dropId, dropPos);
+            Debug.Log($"🎁 Quái vật tiêu diệt rơi nguyên liệu: {dropId} tại {dropPos}");
         }
 
         Destroy(gameObject, 3.5f);

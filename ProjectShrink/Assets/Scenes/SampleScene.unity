@@ -1793,7 +1793,7 @@ MonoBehaviour:
   customItemId: 
   healAmount: 30
   requireConfirmation: 1
-  pickupRange: 0.26
+  pickupRange: 0.45
   enableFloating: 1
   floatAmplitude: 0.012
   floatSpeed: 3
@@ -2430,6 +2430,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1283556686}
+  - component: {fileID: 1283556687}
+  - component: {fileID: 1283556688}
   m_Layer: 0
   m_Name: Item_spider_silk
   m_TagString: Untagged
@@ -2453,6 +2455,50 @@ Transform:
   - {fileID: 525703440}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1283556687
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1283556685}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 0.25
+  m_Center: {x: 0, y: 0.05, z: 0}
+--- !u!114 &1283556688
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1283556685}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d0e8739fb2e6e74da3a3f33ec942e5b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemPickup
+  itemType: 3
+  customItemId: spider_silk
+  healAmount: 0
+  requireConfirmation: 1
+  pickupRange: 0.45
+  enableFloating: 1
+  floatAmplitude: 0.008
+  floatSpeed: 3
+  rotationSpeed: 75
+  preserveCustomScale: 1
+  targetItemScale: {x: 1, y: 1, z: 1}
 --- !u!1 &1349992586
 GameObject:
   m_ObjectHideFlags: 0

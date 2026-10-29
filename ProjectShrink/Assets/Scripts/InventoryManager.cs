@@ -552,14 +552,14 @@ public class InventoryManager : MonoBehaviour
     void Update()
     {
         // Nhấn B, Tab để Bật / Tắt Túi Đồ
-        if (Input.GetKeyDown(toggleKey) || Input.GetKeyDown(altToggleKey))
+        if (Input.GetKeyDown(toggleKey) || Input.GetKeyDown(altToggleKey) || Input.GetKeyDown(KeyCode.B) || Input.GetKeyDown(KeyCode.Tab))
         {
             if (isInventoryOpen && !isCraftingOpen) CloseAllWindows();
             else OpenInventoryTab();
         }
 
-        // Nhấn C để Bật / Tắt Bàn Chế Tạo
-        if (Input.GetKeyDown(craftingKey))
+        // Nhấn C để Bật / Tắt Bàn Chế Tạo 3x3
+        if (Input.GetKeyDown(craftingKey) || Input.GetKeyDown(KeyCode.C))
         {
             if (isInventoryOpen && isCraftingOpen) CloseAllWindows();
             else OpenCraftingTab();
@@ -1916,7 +1916,22 @@ public class InventoryManager : MonoBehaviour
                     : (displayItem != null ? $"{displayItem.itemName} (Tổng {items.Count} món)" : "Túi đồ rỗng")));
         GUI.Label(new Rect(boxX + 92f, boxY + 8f, boxW - 98f, 24f), titleTxt, s_hudNameStyle);
 
-        GUI.Label(new Rect(boxX + 92f, boxY + 34f, boxW - 98f, 22f), "🎒 [Phím B] Túi Đồ  |  🔨 [Phím C] Bàn Chế Tạo", s_hudKeyStyle);
+        Rect btnBagRect = new Rect(boxX + 92f, boxY + 32f, 136f, 26f);
+        Rect btnCraftRect = new Rect(boxX + 234f, boxY + 32f, 140f, 26f);
+
+        Color prevGuiBg = GUI.backgroundColor;
+        GUI.backgroundColor = new Color(0.18f, 0.72f, 0.44f, 1f);
+        if (GUI.Button(btnBagRect, "🎒 Túi Đồ [Phím B]"))
+        {
+            OpenInventoryTab();
+        }
+
+        GUI.backgroundColor = new Color(0.92f, 0.65f, 0.14f, 1f);
+        if (GUI.Button(btnCraftRect, "🔨 Chế Tạo [Phím C]"))
+        {
+            OpenCraftingTab();
+        }
+        GUI.backgroundColor = prevGuiBg;
         GUI.Label(new Rect(boxX + 92f, boxY + 58f, boxW - 98f, 22f), "💊 [Phím H] Dùng nhanh Ống Tiêm (+30 HP)", s_hudKeyStyle);
     }
 
