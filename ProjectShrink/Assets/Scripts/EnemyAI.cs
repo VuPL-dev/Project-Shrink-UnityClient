@@ -6,9 +6,9 @@ using ProjectShrink.AI;
 
 /// <summary>
 /// Trí tuệ Nhân tạo Enemy (Nightmare Beetle / Mutant Rat / Quái Kiến) theo chuẩn FA26SE278:
-/// - FSM 4 trạng thái: Patrol (Tuần tra), Alert (Cảnh giác/Điều tra âm thanh), Chase (Rượt đuổi), Attack (Tấn công), Dead (Chết).
-/// - Tích hợp NavMeshAgent thông minh (có fallback tự động khi chưa bake NavMesh).
-/// - Cảm biến Thị giác (Vision Sensor): Nón nhìn FOV + Raycast chặn nhìn xuyên tường.
+/// - FSM hoàn chỉnh: Idle (Nghỉ quan sát), Patrol (Tuần tra theo Waypoints/Lãnh thổ), Alert (Cảnh giác điều tra âm thanh), Chase (Rượt đuổi), Attack (Tấn công cận chiến), Dead (Chết rơi đồ).
+/// - Tuần tra Lãnh thổ thông minh (Territory Patrol AI): Tự động tạo lộ trình tuần tra khép kín qua các Waypoints trong phòng.
+/// - Cảm biến Thị giác (Vision Sensor): Nón nhìn FOV 65° + Raycast kiểm tra vật cản.
 /// - Cảm biến Thính giác (Hearing Sensor): Lắng nghe SoundEmitter khi Player chạy/ném đồ.
 /// - Combat 2 chiều: Đánh Player (PlayerHealth), nhận sát thương (TakeDamage), chết rơi đồ chế tạo/HealthSyringe.
 /// - Thanh máu Visual trên đầu hiển thị Realtime + Hiệu ứng UI sát thương nổi (Combat Text).
@@ -33,7 +33,7 @@ public class EnemyAI : MonoBehaviour
     public float patrolSpeed = 0.15f;
     [Tooltip("Tốc độ bò rượt đuổi người chơi")]
     public float chaseSpeed = 0.32f;
-    public float rotationSpeed = 5f;
+    public float rotationSpeed = 6f;
     public float attackDamage = 15f;
     [Tooltip("Khoảng cách chạm sát vào người chơi để cắn (mét)")]
     public float attackRange = 0.16f;
@@ -42,13 +42,10 @@ public class EnemyAI : MonoBehaviour
     // Tương thích ngược với các Editor Script cũ
     public float moveSpeed { get => patrolSpeed; set => patrolSpeed = value; }
     public float detectionRange { get => viewRadius; set => viewRadius = value; }
-    public bool useTerritoryPatrol = true;
-    public Vector3 territoryCenter = Vector3.zero;
-    public float territoryRadius = 0.46f;
     public float minStopDistance = 0.085f;
     public bool showHealthBar = true;
     public float healthBarVisibleDistance = 0.65f;
-    public float healthBarHeightOffset = 0.052f;
+    public float healthBarHeightOffset = 0.058f;
     public float minEnemySeparation = 0.085f;
 
     [Header("2. Cảm Biến Thị Giác (Vision Sensor)")]
@@ -66,14 +63,21 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Thời gian cảnh giác điều tra âm thanh (giây)")]
     public float alertInvestigateDuration = 3.0f;
 
-    [Header("4. Tuần Tra (Patrol)")]
+    [Header("4. Tuần Tra & Lãnh Thổ (Patrol & Territory)")]
+    [Tooltip("Bật chế độ tuần tra theo vùng lãnh thổ")]
+    public bool useTerritoryPatrol = true;
+    [Tooltip("Tâm vùng lãnh thổ tuần tra của quái")]
+    public Vector3 territoryCenter = Vector3.zero;
+    [Tooltip("Bán kính vùng lãnh thổ quái đi tuần")]
+    public float territoryRadius = 0.46f;
+    [Tooltip("Danh sách các điểm Waypoint tuần tra trong Scene")]
     public Transform[] waypoints;
     [Tooltip("Cự ly chấp nhận đã đến điểm tuần tra")]
-    public float waypointTolerance = 0.12f;
+    public float waypointTolerance = 0.08f;
     [Tooltip("Thời gian dừng nghỉ quan sát tại mỗi điểm (giây)")]
-    public float waitAtWaypointTime = 1.8f;
+    public float waitAtWaypointTime = 1.4f;
     [Tooltip("Khoảng cách bò tuần tra tới lui nếu không gán Waypoints")]
-    public float patrolDistance = 0.60f;
+    public float patrolDistance = 0.50f;
 
     [Header("5. Rơi Đồ Khi Chết (Drop Item)")]
     public GameObject dropItemPrefab;
@@ -85,7 +89,7 @@ public class EnemyAI : MonoBehaviour
     public Transform eyeTransform;
 
     [Header("7. Trạng Thái Hiện Tại (Read Only)")]
-    [SerializeField] private EnemyState currentState = EnemyState.Idle;
+    [SerializeField] private EnemyState currentState = EnemyState.Patrol;
 
     private NavMeshAgent navAgent;
     private Collider enemyCollider;
@@ -101,6 +105,9 @@ public class EnemyAI : MonoBehaviour
     private Camera mainCamera;
     private float displayedHealthRatio = 1f;
 
+    // Các điểm Waypoint tuần tra trong vùng lãnh thổ (Zero GC Allocation)
+    private readonly Vector3[] territoryWaypoints = new Vector3[3];
+
     // Hiệu ứng UI sát thương nổi (Combat Text Floating)
     private string lastDamageText = "";
     private float lastDamageTextTime = -999f;
@@ -113,17 +120,20 @@ public class EnemyAI : MonoBehaviour
     /// </summary>
     public void ApplyServerConfig()
     {
-        string lookupId = (species == Species.Ant || name.ToLower().Contains("ant")) ? "ant" : "beetle";
         if (InventoryManager.ServerEnemyCache != null)
         {
-            if (InventoryManager.ServerEnemyCache.TryGetValue(lookupId, out var info) ||
-                InventoryManager.ServerEnemyCache.TryGetValue(name.ToLower(), out info))
+            string searchType = (species == Species.Beetle) ? "beetle" : "ant";
+            var info = InventoryManager.ServerEnemyCache.Find(e =>
+                (!string.IsNullOrEmpty(e.type) && e.type.ToLower().Contains(searchType)) ||
+                (!string.IsNullOrEmpty(e.name) && e.name.ToLower().Contains(searchType))
+            );
+
+            if (info != null)
             {
-                if (info.hp > 0f) { maxHealth = info.hp; currentHealth = Mathf.Min(currentHealth, maxHealth); }
+                if (info.maxHp > 0f) { maxHealth = info.maxHp; currentHealth = maxHealth; }
                 if (info.damage > 0f) attackDamage = info.damage;
                 if (info.speed > 0f) { patrolSpeed = info.speed; chaseSpeed = info.speed * 2f; }
-                if (info.attackRange > 0f) attackRange = info.attackRange;
-                if (info.detectionRange > 0f) viewRadius = info.detectionRange;
+                Debug.Log($"🌐 [{enemyName}] Đã áp dụng cấu hình Server: HP={maxHealth}, DMG={attackDamage}, Speed={patrolSpeed}");
             }
         }
     }
@@ -135,37 +145,107 @@ public class EnemyAI : MonoBehaviour
         enemyCollider = GetComponent<Collider>();
         navAgent = GetComponent<NavMeshAgent>();
 
-        if (eyeTransform == null)
-            eyeTransform = transform;
+        if (mainCamera == null)
+            mainCamera = Camera.main;
 
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
 
-        mainCamera = Camera.main;
+        if (territoryCenter.sqrMagnitude < 0.001f)
+            territoryCenter = transform.position;
+
+        BuildTerritoryWaypoints();
+
+        // Tự động tạo các điểm Waypoint trực quan trong Scene nếu chưa được gán
+        if ((waypoints == null || waypoints.Length == 0) && useTerritoryPatrol)
+        {
+            CreateRuntimeTerritoryWaypoints();
+        }
+
+        ActiveEnemies.Add(this);
+    }
+
+    [ContextMenu("Tạo Lộ Trình Tuần Tra (Waypoints)")]
+    public void GenerateWaypointsInEditor()
+    {
+        BuildTerritoryWaypoints();
+        CreateRuntimeTerritoryWaypoints();
+    }
+
+    public void BuildTerritoryWaypoints()
+    {
+        if (territoryCenter.sqrMagnitude < 0.001f)
+            territoryCenter = (spawnPosition.sqrMagnitude > 0.001f) ? spawnPosition : transform.position;
+
+        float y = transform.position.y;
+        float r = Mathf.Min(territoryRadius * 0.72f, 0.32f);
+
+        territoryWaypoints[0] = new Vector3(
+            Mathf.Clamp(territoryCenter.x - r * 0.45f, 1.30f, 1.95f),
+            y,
+            Mathf.Clamp(territoryCenter.z - r, -0.65f, 1.82f)
+        );
+        territoryWaypoints[1] = new Vector3(
+            Mathf.Clamp(territoryCenter.x + r * 0.50f, 1.30f, 1.95f),
+            y,
+            Mathf.Clamp(territoryCenter.z, -0.65f, 1.82f)
+        );
+        territoryWaypoints[2] = new Vector3(
+            Mathf.Clamp(territoryCenter.x - r * 0.30f, 1.30f, 1.95f),
+            y,
+            Mathf.Clamp(territoryCenter.z + r, -0.65f, 1.82f)
+        );
+    }
+
+    public void CreateRuntimeTerritoryWaypoints()
+    {
+        string routeName = $"{name}_PatrolRoute";
+        GameObject parentGo = GameObject.Find(routeName);
+        if (parentGo == null)
+        {
+            parentGo = new GameObject(routeName);
+            if (transform.parent != null) parentGo.transform.SetParent(transform.parent);
+        }
+
+        Transform routeParent = parentGo.transform;
+        waypoints = new Transform[territoryWaypoints.Length];
+        for (int i = 0; i < territoryWaypoints.Length; i++)
+        {
+            Transform wp = routeParent.Find($"Waypoint_{i + 1}");
+            if (wp == null)
+            {
+                GameObject wpGo = new GameObject($"Waypoint_{i + 1}");
+                wp = wpGo.transform;
+                wp.SetParent(routeParent);
+                wp.position = territoryWaypoints[i];
+            }
+            waypoints[i] = wp;
+        }
+    }
+
+    void OnDestroy()
+    {
+        ActiveEnemies.Remove(this);
     }
 
     void OnEnable()
     {
-        if (!ActiveEnemies.Contains(this))
-            ActiveEnemies.Add(this);
-
         SoundEmitter.OnSoundTypeEmitted += HandleSoundHeard;
     }
 
     void OnDisable()
     {
-        ActiveEnemies.Remove(this);
         SoundEmitter.OnSoundTypeEmitted -= HandleSoundHeard;
     }
 
-    public void EnsureTargetPlayer()
+    void EnsureTargetPlayer()
     {
         if (targetPlayer == null || !targetPlayer.gameObject.activeInHierarchy)
         {
-            GameObject p2 = GameObject.Find("player_v2");
-            if (p2 != null && p2.activeInHierarchy)
+            PlayerController localPC = PlayerController.LocalInstance;
+            if (localPC != null && localPC.gameObject.activeInHierarchy)
             {
-                targetPlayer = p2.transform;
+                targetPlayer = localPC.transform;
                 return;
             }
 
@@ -195,7 +275,7 @@ public class EnemyAI : MonoBehaviour
         }
 
         FixMissingMaterials();
-        currentPatrolTarget = spawnPosition;
+        currentPatrolTarget = GetCurrentPatrolDestination();
         ChangeState(EnemyState.Patrol);
     }
 
@@ -205,12 +285,12 @@ public class EnemyAI : MonoBehaviour
 
         EnsureTargetPlayer();
 
-        // 1. Quét Cảm biến Thị giác FOV liên tục
+        // 1. Quét Cảm biến Thị giác FOV liên tục khi chưa đuổi đánh
         if (currentState != EnemyState.Chase && currentState != EnemyState.Attack)
         {
             if (targetPlayer != null && CanSeeTarget(targetPlayer))
             {
-                Debug.Log($"👁️ [{enemyName}] Phát hiện Người chơi qua Cảm biến Thị giác FOV!");
+                Debug.Log($"👁️ [{enemyName}] Phát hiện Người chơi qua Cảm biến Thị giác FOV! Bắt đầu rượt đuổi.");
                 ChangeState(EnemyState.Chase);
             }
         }
@@ -252,7 +332,8 @@ public class EnemyAI : MonoBehaviour
         Vector3 targetDest = GetCurrentPatrolDestination();
         MoveTowards(targetDest, patrolSpeed);
 
-        float dist = Vector3.Distance(transform.position, targetDest);
+        float dist = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z),
+                                      new Vector3(targetDest.x, 0, targetDest.z));
         if (dist <= waypointTolerance)
         {
             AdvanceToNextWaypoint();
@@ -283,13 +364,16 @@ public class EnemyAI : MonoBehaviour
         }
 
         float distToPlayer = Vector3.Distance(transform.position, targetPlayer.position);
+        float distPlayerToTerritory = Vector3.Distance(targetPlayer.position, territoryCenter);
 
-        // Mất dấu nếu người chơi chạy quá xa (gấp 1.5 lần tầm nhìn)
-        if (distToPlayer > viewRadius * 1.5f)
+        // Mất dấu nếu người chơi rút lui ra xa khỏi lãnh thổ hoặc vượt quá tầm nhìn
+        bool playerEscaped = (useTerritoryPatrol && distPlayerToTerritory > territoryRadius * 1.45f && distToPlayer > viewRadius);
+        bool lostSight = (!CanSeeTarget(targetPlayer) && distToPlayer > viewRadius * 1.4f);
+
+        if (playerEscaped || lostSight)
         {
-            Debug.Log($"❓ [{enemyName}] Mất dấu người chơi! Chuyển sang Cảnh giác.");
-            soundInvestigationTarget = targetPlayer.position;
-            ChangeState(EnemyState.Alert);
+            Debug.Log($"👀 [{enemyName}] Người chơi đã rút lui ra xa ({distToPlayer:F2}m). Hủy truy đuổi, quay về tiếp tục tuần tra.");
+            ChangeState(EnemyState.Patrol);
             return;
         }
 
@@ -366,8 +450,14 @@ public class EnemyAI : MonoBehaviour
     {
         if (waypoints != null && waypoints.Length > 0)
         {
-            if (waypoints[currentWaypointIndex] != null)
-                return waypoints[currentWaypointIndex].position;
+            int validIdx = currentWaypointIndex % waypoints.Length;
+            if (waypoints[validIdx] != null)
+                return waypoints[validIdx].position;
+        }
+
+        if (useTerritoryPatrol && territoryWaypoints != null && territoryWaypoints.Length > 0)
+        {
+            return territoryWaypoints[currentWaypointIndex % territoryWaypoints.Length];
         }
 
         return currentPatrolTarget;
@@ -378,6 +468,10 @@ public class EnemyAI : MonoBehaviour
         if (waypoints != null && waypoints.Length > 1)
         {
             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
+        }
+        else if (useTerritoryPatrol && territoryWaypoints != null && territoryWaypoints.Length > 0)
+        {
+            currentWaypointIndex = (currentWaypointIndex + 1) % territoryWaypoints.Length;
         }
         else
         {
@@ -433,7 +527,7 @@ public class EnemyAI : MonoBehaviour
     #endregion
 
     #region Combat (TakeDamage, Attack, Die)
-    IEnumerator PerformAttackRoutine()
+    private IEnumerator PerformAttackRoutine()
     {
         isAttacking = true;
         lastAttackTime = Time.time;
@@ -480,26 +574,14 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    public void ShowDamagePopup(string text, Color color)
-    {
-        lastDamageText = text;
-        lastDamageTextTime = Time.time;
-        lastDamageColor = color;
-    }
-
     public void TakeDamage(float damage)
     {
         if (currentState == EnemyState.Dead) return;
 
         currentHealth -= damage;
-        Debug.Log($"⚔️ [PLAYER HIT] Đánh trúng {enemyName}! Sát thương: {damage} | Máu quái: {Mathf.Max(0, currentHealth)}/{maxHealth}");
-        ShowDamagePopup($"-{Mathf.CeilToInt(damage)} HP", Color.yellow);
+        Debug.Log($"⚔️ [DAMAGE] {enemyName} nhận {damage} sát thương! Máu còn: {Mathf.Max(0, currentHealth)}/{maxHealth}");
 
-        // Khi bị đánh mà đang tuần tra hoặc cảnh giác -> Ngay lập tức rượt đuổi mục tiêu
-        if (targetPlayer != null && (currentState == EnemyState.Patrol || currentState == EnemyState.Alert || currentState == EnemyState.Idle))
-        {
-            ChangeState(EnemyState.Chase);
-        }
+        ShowDamagePopup($"-{Mathf.CeilToInt(damage)} HP", Color.yellow);
 
         if (currentHealth <= 0f)
         {
@@ -508,36 +590,58 @@ public class EnemyAI : MonoBehaviour
         else
         {
             PlayAnim("gethit", 0.05f);
+
+            // Bị đánh lén khi đang tuần tra -> Phản xạ quay lại rượt đuổi người chơi ngay
+            if (targetPlayer != null && (currentState == EnemyState.Patrol || currentState == EnemyState.Idle || currentState == EnemyState.Alert))
+            {
+                ChangeState(EnemyState.Chase);
+            }
         }
     }
 
     void Die()
     {
         ChangeState(EnemyState.Dead);
+        Debug.Log($"💀 [{enemyName}] Đã bị tiêu diệt!");
 
         if (enemyCollider != null)
             enemyCollider.enabled = false;
 
-        if (navAgent != null && navAgent.isActiveAndEnabled)
-            navAgent.enabled = false;
+        DropLoot();
+        Destroy(gameObject, 3.5f);
+    }
 
-        Debug.Log($"💀 [ENEMY DEAD] {enemyName} đã bị tiêu diệt!");
-
+    void DropLoot()
+    {
         Vector3 dropPos = transform.position + Vector3.up * dropYOffset;
+
+        // 1. Rơi Ống Tiêm Sinh Lực (HealthSyringe)
         if (dropItemPrefab != null)
         {
-            GameObject dropped = Instantiate(dropItemPrefab, dropPos, Quaternion.identity);
-            dropped.name = "Health_Syringe_Drop";
-            Debug.Log("🎁 [DROP ITEM] Rơi ra HealthSyringe tại điểm quái ngã gục!");
-        }
-        else
-        {
-            string dropId = (species == Species.Ant || name.ToLower().Contains("ant")) ? "long_bone" : "spider_silk";
-            ItemPickup.CreateWorldDropById(dropId, dropPos);
-            Debug.Log($"🎁 [DROP ITEM] Rơi ra nguyên liệu: {dropId} tại điểm quái ngã gục!");
+            GameObject spawnedSyringe = Instantiate(dropItemPrefab, dropPos, Quaternion.identity);
+            spawnedSyringe.name = "HealthSyringe";
+            spawnedSyringe.transform.localScale = new Vector3(0.035f, 0.035f, 0.035f);
         }
 
-        Destroy(gameObject, 4.5f);
+        // 2. Rơi Nguyên liệu chế tạo (Mạng Nhện / Xương Dài)
+        string materialName = (species == Species.Beetle) ? "spider_silk" : "long_bone";
+        string matPath = $"Prefabs/Items/Item_{materialName}";
+        GameObject matPrefab = Resources.Load<GameObject>(matPath);
+        if (matPrefab != null)
+        {
+            Vector3 matDropPos = dropPos + transform.right * 0.03f;
+            GameObject spawnedMat = Instantiate(matPrefab, matDropPos, Quaternion.identity);
+            spawnedMat.name = $"Item_{materialName}";
+            spawnedMat.transform.localScale = new Vector3(0.04f, 0.04f, 0.04f);
+            Debug.Log($"🎁 [DROP LOOT] {enemyName} rơi nguyên liệu: {materialName}");
+        }
+    }
+
+    public void ShowDamagePopup(string text, Color color)
+    {
+        lastDamageText = text;
+        lastDamageTextTime = Time.time;
+        lastDamageColor = color;
     }
     #endregion
 
@@ -613,7 +717,7 @@ public class EnemyAI : MonoBehaviour
     }
     #endregion
 
-    #region Vision & Hearing Sensors
+    #region Sensors (Vision & Hearing)
     public bool CanSeeTarget(Transform target)
     {
         if (target == null) return false;
@@ -688,13 +792,50 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    void OnDrawGizmos()
+    {
+        // 1. Vẽ vòng tròn Vùng Lãnh Thổ Tuần Tra (Màu xanh lá sáng)
+        Vector3 center = (territoryCenter.sqrMagnitude > 0.001f) ? territoryCenter : transform.position;
+
+        if (useTerritoryPatrol)
+        {
+            Gizmos.color = new Color(0.15f, 0.85f, 0.35f, 0.45f);
+            Gizmos.DrawWireSphere(center, territoryRadius);
+        }
+
+        // 2. Vẽ Lộ trình tuần tra các Waypoints (Màu xanh Cyan)
+        Gizmos.color = Color.cyan;
+        if (waypoints != null && waypoints.Length > 0)
+        {
+            for (int i = 0; i < waypoints.Length; i++)
+            {
+                if (waypoints[i] != null)
+                {
+                    Gizmos.DrawSphere(waypoints[i].position, 0.025f);
+                    int next = (i + 1) % waypoints.Length;
+                    if (waypoints[next] != null)
+                        Gizmos.DrawLine(waypoints[i].position, waypoints[next].position);
+                }
+            }
+        }
+        else if (useTerritoryPatrol && territoryWaypoints != null && territoryWaypoints[0].sqrMagnitude > 0.001f)
+        {
+            for (int i = 0; i < territoryWaypoints.Length; i++)
+            {
+                Gizmos.DrawSphere(territoryWaypoints[i], 0.025f);
+                int next = (i + 1) % territoryWaypoints.Length;
+                Gizmos.DrawLine(territoryWaypoints[i], territoryWaypoints[next]);
+            }
+        }
+    }
+
     void OnDrawGizmosSelected()
     {
-        // 1. Vẽ bán kính thính giác (Màu tím)
+        // 1. Bán kính thính giác (Màu tím)
         Gizmos.color = new Color(0.7f, 0.2f, 0.9f, 0.35f);
         Gizmos.DrawWireSphere(transform.position, hearingRadius);
 
-        // 2. Vẽ tầm nhìn nón FOV (Màu vàng khi bình thường, Màu đỏ khi thấy Player)
+        // 2. Nón tầm nhìn FOV (Màu vàng khi bình thường, Màu đỏ khi thấy Player)
         bool playerInSight = (targetPlayer != null && CanSeeTarget(targetPlayer));
         Gizmos.color = playerInSight ? Color.red : Color.yellow;
         Gizmos.DrawWireSphere(transform.position, viewRadius);
@@ -706,31 +847,8 @@ public class EnemyAI : MonoBehaviour
         Gizmos.DrawLine(transform.position, transform.position + leftBoundary * viewRadius);
         Gizmos.DrawLine(transform.position, transform.position + rightBoundary * viewRadius);
 
-        // 3. Tầm tấn công (Màu đỏ tươi)
+        // 3. Tầm tấn công cắn cận chiến (Màu đỏ tươi)
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        // 4. Tuyến đường tuần tra (Màu xanh dương)
-        Gizmos.color = Color.cyan;
-        if (waypoints != null && waypoints.Length > 0)
-        {
-            for (int i = 0; i < waypoints.Length; i++)
-            {
-                if (waypoints[i] != null)
-                {
-                    Gizmos.DrawSphere(waypoints[i].position, 0.04f);
-                    if (i < waypoints.Length - 1 && waypoints[i + 1] != null)
-                        Gizmos.DrawLine(waypoints[i].position, waypoints[i + 1].position);
-                }
-            }
-        }
-        else
-        {
-            Vector3 pt1 = new Vector3(transform.position.x, transform.position.y, Mathf.Clamp(transform.position.z - patrolDistance, -0.5f, 1.6f));
-            Vector3 pt2 = new Vector3(transform.position.x, transform.position.y, Mathf.Clamp(transform.position.z + patrolDistance, -0.5f, 1.6f));
-            Gizmos.DrawLine(pt1, pt2);
-            Gizmos.DrawWireSphere(pt1, 0.04f);
-            Gizmos.DrawWireSphere(pt2, 0.04f);
-        }
     }
 }
