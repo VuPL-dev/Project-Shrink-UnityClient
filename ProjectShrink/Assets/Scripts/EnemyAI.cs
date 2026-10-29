@@ -42,7 +42,15 @@ public class EnemyAI : MonoBehaviour
     public float minEnemySeparation = 0.085f;
 
     // Tương thích ngược với các Editor Script cũ
+    public enum EnemySpecies { Beetle = 0, Ant = 1 }
     public float moveSpeed { get => patrolSpeed; set => patrolSpeed = value; }
+    public bool useTerritoryPatrol = true;
+    public Vector3 territoryCenter = Vector3.zero;
+    public float territoryRadius = 0.46f;
+    public float minStopDistance = 0.085f;
+    public bool showHealthBar = true;
+    public float healthBarVisibleDistance = 0.65f;
+    public float healthBarHeightOffset = 0.052f;
     public float detectionRange { get => viewRadius; set => viewRadius = value; }
 
     [Header("2. Cảm Biến Thị Giác (Vision Sensor)")]
