@@ -177,7 +177,7 @@ public class EnemyAI : MonoBehaviour
     public void BuildTerritoryWaypoints()
     {
         if (territoryCenter.sqrMagnitude < 0.001f)
-            territoryCenter = (spawnPosition.sqrMagnitude > 0.001f) ? spawnPosition : transform.position;
+            territoryCenter = (territoryCenter.sqrMagnitude > 0.001f) ? territoryCenter : ((spawnPosition.sqrMagnitude > 0.001f) ? spawnPosition : transform.position);
 
         float y = transform.position.y;
         float r = Mathf.Min(territoryRadius * 0.72f, 0.32f);
@@ -751,7 +751,9 @@ public class EnemyAI : MonoBehaviour
             return;
 
         float dist = Vector3.Distance(transform.position, soundPos);
-        float effectiveRadius = hearingRadius * loudness;
+        // Bước chân nhẹ không kích động nếu quái đang ở xa lãnh thổ
+        float multiplier = (soundType == SoundEmitter.SoundType.CombatAction) ? 1.0f : (soundType == SoundEmitter.SoundType.Footstep ? 0.60f : 0.8f);
+        float effectiveRadius = hearingRadius * loudness * multiplier;
 
         if (dist <= effectiveRadius)
         {
