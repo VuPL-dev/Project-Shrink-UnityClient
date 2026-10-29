@@ -139,7 +139,12 @@ public class EnemyAI : MonoBehaviour
                 var info = kvp.Value;
                 if (info != null && !string.IsNullOrEmpty(info.enemyId) && info.enemyId.ToLower().Contains(searchType))
                 {
-                    if (info.hp > 0f) { maxHealth = info.hp; currentHealth = maxHealth; }
+                    if (info.hp > 0f)
+                    {
+                        maxHealth = info.hp;
+                        // Giữ nguyên lượng máu hiện tại khi đang chiến đấu, KHÔNG tự động hồi đầy máu
+                        currentHealth = Mathf.Clamp(currentHealth, 0f, maxHealth);
+                    }
                     if (info.damage > 0f) attackDamage = info.damage;
                     if (info.speed > 0f) { patrolSpeed = info.speed; chaseSpeed = info.speed * 2f; }
                     if (info.attackRange > 0f) attackRange = info.attackRange;
