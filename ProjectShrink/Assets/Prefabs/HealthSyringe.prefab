@@ -10,15 +10,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.04
+      value: 0.055
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.04
+      value: 0.055
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.04
+      value: 0.055
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
       propertyPath: m_LocalPosition.x
@@ -73,7 +73,7 @@ PrefabInstance:
       addedObject: {fileID: 4502413520851540384}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 7942368894525922673}
+      addedObject: {fileID: 91169838488167577}
   m_SourcePrefab: {fileID: 100100000, guid: 6676dcba0ae60744d8f056982465b4d9, type: 3}
 --- !u!1 &178728516850661384 stripped
 GameObject:
@@ -101,7 +101,7 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 1.5
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &7942368894525922673
+--- !u!114 &91169838488167577
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -110,12 +110,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 178728516850661384}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 91f1fd3663d055944b63a02eee8e1046, type: 3}
+  m_Script: {fileID: 11500000, guid: 7d0e8739fb2e6e74da3a3f33ec942e5b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickup
-  itemId: health_syringe
-  itemName: Health Syringe
-  quantity: 1
+  itemType: 0
+  healAmount: 30
+  requireConfirmation: 1
+  pickupRange: 0.26
+  enableFloating: 1
+  floatAmplitude: 0.012
+  floatSpeed: 3
   rotationSpeed: 65
-  hoverSpeed: 2
-  hoverHeight: 0.012
+  preserveCustomScale: 0
+  targetItemScale: {x: 0.055, y: 0.055, z: 0.055}

@@ -1393,8 +1393,7 @@ public class InventoryManager : MonoBehaviour
     // =========================================================================
     void OnGUI()
     {
-        if (!isInventoryOpen && items.Count == 0 && !isSpearEquipped && !isHammerEquipped && !isTorchEquipped) return;
-        if (!isInventoryOpen && Event.current.type != EventType.Repaint) return;
+        // HUD buttons and inventory always receive GUI events
 
         EnsureGuiStylesInitialized();
 

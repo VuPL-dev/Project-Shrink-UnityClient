@@ -26,7 +26,7 @@ public class ItemPickup : MonoBehaviour
 
     [Header("2. Tùy Chọn Tương Tác Nhặt Đồ")]
     public bool requireConfirmation = true;
-    public float pickupRange = 0.45f;
+    public float pickupRange = 1.2f;
 
     [Header("3. Hiệu Ứng Trôi & Xoay (Floating / Bobbing)")]
     public bool enableFloating = true;
@@ -528,7 +528,7 @@ public class ItemPickup : MonoBehaviour
         pickup.customItemId = itemId;
         pickup.preserveCustomScale = true;
         pickup.targetItemScale = Vector3.one;
-        pickup.pickupRange = 0.45f;
+        pickup.pickupRange = 1.2f;
         pickup.enableFloating = true;
         pickup.floatAmplitude = 0.008f;
         pickup.rotationSpeed = 70f;
@@ -568,7 +568,7 @@ public class ItemPickup : MonoBehaviour
         pickup.itemType = type;
         pickup.preserveCustomScale = true;
         pickup.targetItemScale = Vector3.one;
-        pickup.pickupRange = 0.45f;
+        pickup.pickupRange = 1.2f;
         pickup.enableFloating = true;
         pickup.floatAmplitude = 0.008f;
         pickup.rotationSpeed = 70f;

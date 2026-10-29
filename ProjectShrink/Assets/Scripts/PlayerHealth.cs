@@ -80,12 +80,6 @@ public class PlayerHealth : MonoBehaviour
         {
             displayedFill = target;
         }
-
-        if (enableTestKeys)
-        {
-            if (Input.GetKeyDown(KeyCode.H)) TakeDamage(15f);
-            if (Input.GetKeyDown(KeyCode.G)) Heal(15f);
-        }
     }
 
     private static void EnsureStylesInitialized()
@@ -113,31 +107,36 @@ public class PlayerHealth : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Vẽ Thanh Máu Nhân Vật cực rõ nét ở góc trên bên trái màn hình (Chỉ chạy ở Repaint để chống lag)
+    /// </summary>
     void OnGUI()
     {
-        if (!showHealthUI || Event.current.type != EventType.Repaint) return;
+        if (!showHealthUI || !gameObject.activeInHierarchy) return;
+        // Tối ưu hiệu năng: Chỉ vẽ ở pha Repaint, bỏ qua các pha Layout/Input thừa
+        if (Event.current.type != EventType.Repaint) return;
 
         EnsureStylesInitialized();
 
-        float uiScale = Mathf.Max(1f, Screen.height / 540f);
         Matrix4x4 prevMatrix = GUI.matrix;
+        float uiScale = Mathf.Max(1f, Screen.height / 540f);
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(uiScale, uiScale, 1f));
 
-        float x = 20f;
-        float y = 18f;
-        float width = 360f;
-        float height = 36f;
+        float x = 22f;
+        float y = 20f;
+        float width = 350f;
+        float height = 38f;
 
-        // 1. Viền Vàng Rực Rỡ nổi bật phong cách game sinh tồn
-        GUI.color = new Color(1f, 0.85f, 0.20f, 0.98f);
-        GUI.DrawTexture(new Rect(x - 3, y - 3, width + 6, height + 6), Texture2D.whiteTexture);
+        // 1. Bóng đổ đen phía ngoài cùng
+        GUI.color = new Color(0f, 0f, 0f, 0.92f);
+        GUI.DrawTexture(new Rect(x - 5f, y - 5f, width + 10f, height + 10f), Texture2D.whiteTexture);
 
-        // 2. Viền đen tạo độ tương phản cao
-        GUI.color = new Color(0.04f, 0.06f, 0.08f, 0.98f);
-        GUI.DrawTexture(new Rect(x - 1.5f, y - 1.5f, width + 3, height + 3), Texture2D.whiteTexture);
+        // 2. Viền vàng kim sáng rực giúp thanh máu nhân vật luôn nổi bật trên nền phòng tối
+        GUI.color = new Color(1f, 0.86f, 0.28f, 1f);
+        GUI.DrawTexture(new Rect(x - 3f, y - 3f, width + 6f, height + 6f), Texture2D.whiteTexture);
 
-        // 3. Nền tối sâu thẳm
-        GUI.color = new Color(0.10f, 0.12f, 0.15f, 0.95f);
+        // 3. Nền rỗng bên trong màu xám xanh rõ ràng (khi mất máu vẫn thấy rõ độ dài thanh máu)
+        GUI.color = new Color(0.20f, 0.23f, 0.28f, 0.98f);
         GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
 
         // 4. Lớp máu trễ màu vàng cam (hiệu ứng tụt máu)
