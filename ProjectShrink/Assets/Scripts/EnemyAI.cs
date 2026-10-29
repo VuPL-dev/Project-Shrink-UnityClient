@@ -1,61 +1,69 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using ProjectShrink.AI;
 
 /// <summary>
-/// Trí tuệ Nhân tạo Enemy (Nightmare Beetle / Mutant Rat) theo chuẩn FA26SE278:
-/// - FSM 4 trạng thái: Patrol (Tuần tra), Alert (Cảnh giác/Điều tra âm thanh), Chase (Rượt đuổi), Attack (Tấn công), Dead (Chết).
-/// - Tích hợp NavMeshAgent thông minh (có fallback tự động khi chưa bake NavMesh).
-/// - Cảm biến Thị giác (Vision Sensor): Nón nhìn FOV + Raycast chặn nhìn xuyên tường.
-/// - Cảm biến Thính giác (Hearing Sensor): Lắng nghe SoundEmitter khi Player chạy/ném đồ.
-/// - Combat 2 chiều: Đánh Player (PlayerHealth), nhận sát thương (TakeDamage), chết rơi HealthSyringe.
-/// - Thanh máu Visual trên đầu hiển thị Realtime.
+/// Trí tuệ Nhân tạo Enemy (Kiến Khổng Lồ / Bọ Cánh Cứng / Mutant Rat) theo chuẩn Đồ Án FA26SE278:
+/// - FSM 5 trạng thái: Idle, Patrol, Alert (Điều tra âm thanh), Chase (Rượt đuổi), Attack (Tấn công), Dead.
+/// - Cảm biến Thị giác (Vision Sensor): Nón nhìn FOV (viewAngle = 85°, viewRadius = 2.2m) + Raycast chặn nhìn xuyên tường (obstacleMask).
+/// - Cảm biến Thính giác (Hearing Sensor): Lắng nghe SoundEmitter khi Player chạy/vung vũ khí (hearingRadius = 2.5m).
+/// - Combat 2 chiều: Tấn công gây sát thương lên PlayerHealth, nhận sát thương (TakeDamage), xử lý Né Tránh Miss đòn ([ENEMY MISS]).
+/// - Thanh máu nổi (HealthBar UI) vẽ trực tiếp trên đầu quái vật mượt mà (Zero GC Allocation).
+/// - Tự động khóa mục tiêu người chơi (EnsureTargetPlayer) vào player_v2.
+/// - Chống quái vật dính chồng lên nhau (minEnemySeparation) & Danh sách ActiveEnemies toàn cục.
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class EnemyAI : MonoBehaviour
 {
+    public enum Species { Beetle = 0, Ant = 1 }
     public enum EnemyState { Idle, Patrol, Alert, Chase, Attack, Dead }
 
+    public static readonly List<EnemyAI> ActiveEnemies = new List<EnemyAI>();
+
+    [Header("0. Thông Tin Quái Vật")]
+    public Species species = Species.Ant;
+    public string enemyName = "Kiến Khổng Lồ";
+
     [Header("1. Chỉ Số Chiến Đấu (Combat Stats)")]
-    public float maxHealth = 50f;
-    public float currentHealth = 50f;
+    public float maxHealth = 45f;
+    public float currentHealth = 45f;
     [Tooltip("Tốc độ bò tuần tra")]
     public float patrolSpeed = 0.18f;
     [Tooltip("Tốc độ bò rượt đuổi người chơi")]
     public float chaseSpeed = 0.45f;
-    public float rotationSpeed = 6f;
+    public float rotationSpeed = 8f;
     public float attackDamage = 15f;
     [Tooltip("Khoảng cách chạm sát vào người chơi để cắn (mét)")]
     public float attackRange = 0.22f;
     public float attackCooldown = 1.4f;
+    [Tooltip("Khoảng cách tối thiểu chống đè quái vật lên nhau")]
+    public float minEnemySeparation = 0.085f;
 
     // Tương thích ngược với các Editor Script cũ
     public float moveSpeed { get => patrolSpeed; set => patrolSpeed = value; }
     public float detectionRange { get => viewRadius; set => viewRadius = value; }
 
     [Header("2. Cảm Biến Thị Giác (Vision Sensor)")]
-    [Tooltip("Bán kính tầm nhìn (mét) - Quét 1/4 căn phòng (~0.7m)")]
+    [Tooltip("Bán kính tầm nhìn hình nón (mét)")]
     public float viewRadius = 2.2f;
     [Range(0, 360)]
-    [Tooltip("Góc quét hình nón FOV (độ) - Góc nhìn tập trung phía trước")]
+    [Tooltip("Góc quét hình nón FOV (độ)")]
     public float viewAngle = 85f;
-    [Tooltip("Layer vật cản che khuất tầm nhìn (Tường, Cửa)")]
+    [Tooltip("Layer vật cản che khuất tầm nhìn (Tường, Cửa, Bàn Ghế)")]
     public LayerMask obstacleMask;
 
     [Header("3. Cảm Biến Thính Giác (Hearing Sensor)")]
-    [Tooltip("Bán kính tai nghe tiếng chạy")]
+    [Tooltip("Bán kính tai nghe tiếng chân chạy / đánh nhau")]
     public float hearingRadius = 2.5f;
     [Tooltip("Thời gian cảnh giác điều tra âm thanh (giây)")]
     public float alertInvestigateDuration = 3.0f;
 
     [Header("4. Tuần Tra (Patrol)")]
     public Transform[] waypoints;
-    [Tooltip("Cự ly chấp nhận đã đến điểm tuần tra")]
     public float waypointTolerance = 0.12f;
-    [Tooltip("Thời gian dừng nghỉ quan sát tại mỗi điểm (giây)")]
     public float waitAtWaypointTime = 1.8f;
-    [Tooltip("Khoảng cách bò tuần tra tới lui nếu không gán Waypoints")]
     public float patrolDistance = 0.60f;
 
     [Header("5. Rơi Đồ Khi Chết (Drop Item)")]
@@ -88,21 +96,32 @@ public class EnemyAI : MonoBehaviour
 
     void Awake()
     {
+        if (maxHealth <= 0f) maxHealth = 45f;
         currentHealth = maxHealth;
         spawnPosition = transform.position;
         enemyCollider = GetComponent<Collider>();
         navAgent = GetComponent<NavMeshAgent>();
 
-        if (eyeTransform == null)
-            eyeTransform = transform;
-
-        if (animator == null)
-            animator = GetComponentInChildren<Animator>();
-
+        if (eyeTransform == null) eyeTransform = transform;
+        if (animator == null) animator = GetComponentInChildren<Animator>();
         mainCamera = Camera.main;
     }
 
-    
+    void OnEnable()
+    {
+        if (!ActiveEnemies.Contains(this))
+            ActiveEnemies.Add(this);
+
+        // Đăng ký nhận sóng âm thanh toàn cục (Hearing Sensor)
+        SoundEmitter.OnSoundEmitted += HandleSoundHeard;
+    }
+
+    void OnDisable()
+    {
+        ActiveEnemies.Remove(this);
+        SoundEmitter.OnSoundEmitted -= HandleSoundHeard;
+    }
+
     public void EnsureTargetPlayer()
     {
         if (targetPlayer == null || !targetPlayer.gameObject.activeInHierarchy)
@@ -139,21 +158,12 @@ public class EnemyAI : MonoBehaviour
         if (patrolSpeed < 0.16f) patrolSpeed = 0.18f;
         if (attackRange < 0.20f) attackRange = 0.22f;
 
-        // Tự động tìm nhân vật trong Scene nếu chưa gán
-        if (targetPlayer == null)
-        {
-            PlayerController player = FindFirstObjectByType<PlayerController>();
-            if (player != null)
-                targetPlayer = player.transform;
-        }
-
-        // Tự động tìm Prefab HealthSyringe nếu chưa gán
+        // Tự động tìm Prefab HealthSyringe rơi đồ nếu chưa gán
         if (dropItemPrefab == null)
         {
             dropItemPrefab = Resources.Load<GameObject>("HealthSyringe");
             if (dropItemPrefab == null)
             {
-                // Thử tìm trong Prefabs
                 GameObject[] all = Resources.FindObjectsOfTypeAll<GameObject>();
                 foreach (var g in all)
                 {
@@ -168,22 +178,10 @@ public class EnemyAI : MonoBehaviour
 
         FixMissingMaterials();
 
-        // Khởi tạo điểm tuần tra đầu tiên cách vị trí đứng patrolDistance
         float initialZ = Mathf.Clamp(spawnPosition.z - patrolDistance, -0.5f, 1.6f);
         currentPatrolTarget = new Vector3(spawnPosition.x, spawnPosition.y, initialZ);
 
         ChangeState(EnemyState.Idle);
-    }
-
-    void OnEnable()
-    {
-        // Đăng ký nhận sóng âm thanh toàn cục
-        SoundEmitter.OnSoundEmitted += HandleSoundHeard;
-    }
-
-    void OnDisable()
-    {
-        SoundEmitter.OnSoundEmitted -= HandleSoundHeard;
     }
 
     void Update()
@@ -191,55 +189,65 @@ public class EnemyAI : MonoBehaviour
         if (currentState == EnemyState.Dead) return;
         EnsureTargetPlayer();
 
-        if (targetPlayer == null)
-        {
-            PlayerController player = FindFirstObjectByType<PlayerController>();
-            if (player != null) targetPlayer = player.transform;
-            return;
-        }
+        // 1. Phân tách quái vật chống chồng lấn (Multi-Enemy Separation)
+        ApplySeparation();
 
-        // Cập nhật thanh máu mượt
-        float targetRatio = Mathf.Clamp01(currentHealth / maxHealth);
-        displayedHealthRatio = Mathf.Lerp(displayedHealthRatio, targetRatio, 10f * Time.deltaTime);
-
-        // Kiểm tra tầm nhìn liên tục
-        bool playerSeen = CanSeeTarget(targetPlayer);
-
-        // Xử lý chuyển đổi FSM
+        // 2. Chạy FSM
         switch (currentState)
         {
             case EnemyState.Idle:
-                UpdateIdleState(playerSeen);
+                UpdateIdle();
                 break;
-
             case EnemyState.Patrol:
-                UpdatePatrolState(playerSeen);
+                UpdatePatrol();
                 break;
-
             case EnemyState.Alert:
-                UpdateAlertState(playerSeen);
+                UpdateAlert();
                 break;
-
             case EnemyState.Chase:
-                UpdateChaseState(playerSeen);
+                UpdateChase();
                 break;
-
             case EnemyState.Attack:
-                UpdateAttackState();
+                UpdateAttack();
                 break;
+        }
+
+        // 3. Quét Cảm biến Thị giác FOV liên tục khi chưa Chase
+        if (currentState != EnemyState.Chase && currentState != EnemyState.Attack)
+        {
+            if (targetPlayer != null && CanSeeTarget(targetPlayer))
+            {
+                Debug.Log($"👁️ [{enemyName}] Phát hiện Người chơi qua Cảm biến Thị giác FOV!");
+                ChangeState(EnemyState.Chase);
+            }
         }
     }
 
-    #region FSM State Updates
-    void UpdateIdleState(bool playerSeen)
+    void ApplySeparation()
     {
-        if (playerSeen)
+        if (minEnemySeparation <= 0f) return;
+        Vector3 myPos = transform.position;
+        for (int i = 0; i < ActiveEnemies.Count; i++)
         {
-            Debug.Log($"👁️ [{name}] Nhìn thấy người chơi! Bắt đầu đuổi theo (Chase)!");
-            ChangeState(EnemyState.Chase);
-            return;
-        }
+            EnemyAI other = ActiveEnemies[i];
+            if (other == null || other == this || other.currentState == EnemyState.Dead) continue;
 
+            Vector3 diff = myPos - other.transform.position;
+            diff.y = 0f;
+            float distSq = diff.sqrMagnitude;
+            if (distSq < minEnemySeparation * minEnemySeparation && distSq > 0.00001f)
+            {
+                float dist = Mathf.Sqrt(distSq);
+                Vector3 push = (diff / dist) * (minEnemySeparation - dist) * 2.5f * Time.deltaTime;
+                transform.position += push;
+            }
+        }
+    }
+
+    #region FSM States
+
+    void UpdateIdle()
+    {
         waypointTimer += Time.deltaTime;
         if (waypointTimer >= waitAtWaypointTime)
         {
@@ -248,304 +256,264 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    void UpdatePatrolState(bool playerSeen)
+    void UpdatePatrol()
     {
-        if (playerSeen)
-        {
-            Debug.Log($"👁️ [{name}] Nhìn thấy người chơi khi đang tuần tra! Bắt đầu đuổi theo (Chase)!");
-            ChangeState(EnemyState.Chase);
-            return;
-        }
-
-        Vector3 destination;
-        if (waypoints != null && waypoints.Length > 0 && waypoints[currentWaypointIndex] != null)
-        {
-            destination = waypoints[currentWaypointIndex].position;
-        }
-        else
-        {
-            destination = currentPatrolTarget;
-        }
-
-        MoveTowards(destination, patrolSpeed);
+        Vector3 targetPos = GetCurrentPatrolDestination();
+        MoveTowards(targetPos, patrolSpeed);
 
         float dist = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z),
-                                      new Vector3(destination.x, 0, destination.z));
-
+                                      new Vector3(targetPos.x, 0, targetPos.z));
         if (dist <= waypointTolerance)
         {
-            if (waypoints != null && waypoints.Length > 0)
-            {
-                currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
-            }
-            else
-            {
-                // Đảo chiều tuần tra tới lui dọc hành lang phòng
-                patrolDirection = -patrolDirection;
-                float targetZ = Mathf.Clamp(spawnPosition.z + patrolDirection * patrolDistance, -0.5f, 1.6f);
-                currentPatrolTarget = new Vector3(spawnPosition.x, spawnPosition.y, targetZ);
-            }
+            AdvanceToNextPatrolPoint();
             ChangeState(EnemyState.Idle);
         }
     }
 
-    void UpdateAlertState(bool playerSeen)
+    void UpdateAlert()
     {
-        if (playerSeen)
-        {
-            ChangeState(EnemyState.Chase);
-            return;
-        }
-
+        MoveTowards(soundInvestigationTarget, patrolSpeed * 1.25f);
         alertTimer += Time.deltaTime;
-
-        // Di chuyển điều tra vị trí phát ra âm thanh
-        MoveTowards(soundInvestigationTarget, patrolSpeed * 1.2f);
 
         float dist = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z),
                                       new Vector3(soundInvestigationTarget.x, 0, soundInvestigationTarget.z));
-
-        // Khi đã đến gần vị trí nghe âm thanh -> Xoay vòng tìm kiếm
-        if (dist <= waypointTolerance * 1.5f)
+        if (dist <= waypointTolerance || alertTimer >= alertInvestigateDuration)
         {
-            transform.Rotate(Vector3.up, 50f * Time.deltaTime);
-        }
-
-        if (alertTimer >= alertInvestigateDuration)
-        {
-            alertTimer = 0f;
+            Debug.Log($"🔎 [{enemyName}] Không thấy ai tại điểm nghi vấn, quay lại tuần tra.");
             ChangeState(EnemyState.Patrol);
         }
     }
 
-    void UpdateChaseState(bool playerSeen)
+    void UpdateChase()
     {
-        if (targetPlayer == null) return;
+        if (targetPlayer == null)
+        {
+            ChangeState(EnemyState.Patrol);
+            return;
+        }
 
-        float distToPlayer = Vector3.Distance(transform.position, targetPlayer.position);
-
-        if (distToPlayer <= attackRange)
+        float dist = Vector3.Distance(transform.position, targetPlayer.position);
+        if (dist <= attackRange)
         {
             ChangeState(EnemyState.Attack);
             return;
         }
 
-        // Nếu mất dấu tầm nhìn quá xa (> viewRadius * 1.4)
-        if (!playerSeen && distToPlayer > viewRadius * 1.4f)
+        // Nếu người chơi chạy quá xa khỏi tầm nhìn
+        if (dist > viewRadius * 1.5f && !CanSeeTarget(targetPlayer))
         {
+            Debug.Log($"❓ [{enemyName}] Mất dấu Người chơi, chuyển sang cảnh giác!");
             soundInvestigationTarget = targetPlayer.position;
             ChangeState(EnemyState.Alert);
             return;
         }
 
-        // Rượt đuổi theo người chơi
         MoveTowards(targetPlayer.position, chaseSpeed);
     }
 
-    void UpdateAttackState()
+    void UpdateAttack()
     {
-        if (targetPlayer == null) return;
+        if (targetPlayer == null)
+        {
+            ChangeState(EnemyState.Patrol);
+            return;
+        }
 
+        RotateTowards(targetPlayer.position);
         float dist = Vector3.Distance(transform.position, targetPlayer.position);
 
-        // Nếu người chơi lùi ra ngoài tầm đánh
         if (dist > attackRange * 1.35f && !isAttacking)
         {
             ChangeState(EnemyState.Chase);
             return;
         }
 
-        // Luôn xoay mặt nhìn theo người chơi
-        Vector3 lookDir = (targetPlayer.position - transform.position);
-        lookDir.y = 0f;
-        if (lookDir.sqrMagnitude > 0.001f)
-        {
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), rotationSpeed * 2f * Time.deltaTime);
-        }
-
-        // Đánh khi hết cooldown
-        if (Time.time >= lastAttackTime + attackCooldown && !isAttacking)
+        if (Time.time - lastAttackTime >= attackCooldown && !isAttacking)
         {
             StartCoroutine(PerformAttackRoutine());
         }
     }
-    #endregion
 
-    #region Navigation & Movement
-    void MoveTowards(Vector3 destination, float speed)
+    IEnumerator PerformAttackRoutine()
     {
-        if (navAgent != null && navAgent.isActiveAndEnabled && navAgent.isOnNavMesh)
+        isAttacking = true;
+        lastAttackTime = Time.time;
+
+        if (animator != null)
         {
-            navAgent.speed = speed;
-            navAgent.SetDestination(destination);
+            animator.SetTrigger("attack");
         }
-        else
+
+        yield return new WaitForSeconds(0.35f);
+
+        if (targetPlayer != null && currentState != EnemyState.Dead)
         {
-            // Fallback mượt mà khi scene chưa bake NavMesh
-            Vector3 dir = (destination - transform.position);
-            dir.y = 0f;
-            if (dir.sqrMagnitude > 0.001f)
+            float dist = Vector3.Distance(transform.position, targetPlayer.position);
+            if (dist <= attackRange * 1.45f)
             {
-                Quaternion targetRot = Quaternion.LookRotation(dir);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
-                transform.position += dir.normalized * speed * Time.deltaTime;
+                PlayerController pc = targetPlayer.GetComponent<PlayerController>();
+                PlayerHealth ph = targetPlayer.GetComponent<PlayerHealth>();
+
+                // Kiểm tra né đòn Miss (Dodge / Evade)
+                if (pc != null && pc.isDodging)
+                {
+                    Debug.Log($"💨 [ENEMY MISS] {enemyName} cắn hụt vì Người chơi đã NÉ ĐÒN!");
+                }
+                else if (ph != null)
+                {
+                    Debug.Log($"💥 [{enemyName}] Cắn trúng Người chơi gây {attackDamage} sát thương!");
+                    ph.TakeDamage(attackDamage);
+                }
             }
         }
+
+        yield return new WaitForSeconds(0.45f);
+        isAttacking = false;
     }
 
-    void StopMoving()
+    void ChangeState(EnemyState newState)
     {
-        if (navAgent != null && navAgent.isActiveAndEnabled && navAgent.isOnNavMesh)
+        currentState = newState;
+        waypointTimer = 0f;
+        alertTimer = 0f;
+
+        if (animator != null)
         {
-            navAgent.ResetPath();
+            animator.SetBool("isMoving", newState == EnemyState.Patrol || newState == EnemyState.Chase || newState == EnemyState.Alert);
+            animator.SetBool("isChasing", newState == EnemyState.Chase);
+            animator.SetBool("isAlert", newState == EnemyState.Alert);
         }
     }
+
     #endregion
 
-    #region Sensors (Vision & Hearing)
+    #region Vision & Hearing Sensors
+
+    /// <summary>
+    /// Cảm biến Thị giác FOV (Vision Sensor Cone)
+    /// </summary>
     public bool CanSeeTarget(Transform target)
     {
         if (target == null) return false;
 
-        Vector3 eyePos = eyeTransform != null ? eyeTransform.position : transform.position + Vector3.up * 0.1f;
-        Vector3 targetPos = target.position + Vector3.up * 0.1f;
-        Vector3 dirToTarget = (targetPos - eyePos);
+        Vector3 origin = eyeTransform != null ? eyeTransform.position : transform.position + Vector3.up * 0.05f;
+        Vector3 targetPos = target.position + Vector3.up * 0.05f;
+        Vector3 dirToTarget = (targetPos - origin);
         float distToTarget = dirToTarget.magnitude;
 
-        // 1. Kiểm tra cự ly
         if (distToTarget > viewRadius) return false;
 
-        // 2. Kiểm tra góc FOV
-        Vector3 forward = transform.forward;
-        float angle = Vector3.Angle(forward, new Vector3(dirToTarget.x, 0, dirToTarget.z));
+        float angle = Vector3.Angle(transform.forward, dirToTarget.normalized);
         if (angle > viewAngle * 0.5f) return false;
 
-        // 3. Kiểm tra vật cản che khuất bằng Raycast
-        if (Physics.Raycast(eyePos, dirToTarget.normalized, out RaycastHit hit, distToTarget, obstacleMask))
+        // Quét Raycast chặn nhìn xuyên tường
+        if (Physics.Raycast(origin, dirToTarget.normalized, out RaycastHit hit, distToTarget, obstacleMask, QueryTriggerInteraction.Ignore))
         {
-            if (hit.transform.root != target.root)
+            if (hit.transform != target && !hit.transform.IsChildOf(target))
             {
-                return false; // Bị tường hoặc vật cản che chắn
+                return false; // Bị tường che khuất
             }
         }
 
         return true;
     }
 
-    void HandleSoundHeard(Vector3 soundOrigin, float soundRadius, GameObject source)
+    /// <summary>
+    /// Cảm biến Thính giác (Hearing Sensor)
+    /// </summary>
+    private void HandleSoundHeard(Vector3 soundPos, SoundEmitter.SoundType soundType, float loudness)
     {
         if (currentState == EnemyState.Dead || currentState == EnemyState.Chase || currentState == EnemyState.Attack)
             return;
 
-        // Bỏ qua nếu chính mình phát ra tiếng
-        if (source != null && source.transform.root == transform.root)
-            return;
+        float dist = Vector3.Distance(transform.position, soundPos);
+        float effectiveRadius = hearingRadius * loudness;
 
-        float distToSound = Vector3.Distance(transform.position, soundOrigin);
-        if (distToSound <= (hearingRadius + soundRadius))
+        if (dist <= effectiveRadius)
         {
-            soundInvestigationTarget = soundOrigin;
-            alertTimer = 0f;
+            Debug.Log($"👂 [{enemyName}] Nghe thấy âm thanh {soundType} tại khoảng cách {dist:F2}m! Chuyển sang Cảnh giác điều tra.");
+            soundInvestigationTarget = soundPos;
             ChangeState(EnemyState.Alert);
-            Debug.Log($"👂 [{name}] Cảm biến thính giác nghe thấy tiếng động tại {soundOrigin}! Chuyển sang Cảnh giác (Alert).");
         }
     }
-    #endregion
 
-    #region State Transition & Animations
-    void ChangeState(EnemyState newState)
+    public void InvestigateSound(Vector3 soundPos)
     {
         if (currentState == EnemyState.Dead) return;
-
-        currentState = newState;
-
-        switch (currentState)
-        {
-            case EnemyState.Idle:
-                StopMoving();
-                PlayAnim("idle1", 0.2f);
-                break;
-
-            case EnemyState.Patrol:
-                PlayAnim("walk", 0.15f);
-                break;
-
-            case EnemyState.Alert:
-                PlayAnim("walk", 0.15f);
-                break;
-
-            case EnemyState.Chase:
-                PlayAnim("walk", 0.1f);
-                break;
-
-            case EnemyState.Attack:
-                StopMoving();
-                break;
-
-            case EnemyState.Dead:
-                StopMoving();
-                PlayAnim("death", 0.1f);
-                break;
-        }
+        soundInvestigationTarget = soundPos;
+        ChangeState(EnemyState.Alert);
     }
 
-    void PlayAnim(string stateName, float crossFade = 0.1f)
-    {
-        if (animator == null) return;
-        animator.CrossFade(stateName, crossFade);
-    }
     #endregion
 
-    #region Combat (TakeDamage, Attack, Die)
-    IEnumerator PerformAttackRoutine()
+    #region Movement Helpers
+
+    void MoveTowards(Vector3 targetPos, float speed)
     {
-        isAttacking = true;
-        lastAttackTime = Time.time;
+        RotateTowards(targetPos);
+        Vector3 moveDir = (targetPos - transform.position);
+        moveDir.y = 0f;
 
-        PlayAnim("atack1", 0.08f);
-
-        // Chờ đúng thời điểm vung càng cắn (0.45s)
-        yield return new WaitForSeconds(0.45f);
-
-        if (currentState != EnemyState.Dead && targetPlayer != null)
+        if (moveDir.sqrMagnitude > 0.0001f)
         {
-            float dist = Vector3.Distance(transform.position, targetPlayer.position);
-            // Chỉ gây sát thương khi thực sự chạm sát người chơi (cự ly chạm đầu kiến ~ 0.20m)
-            if (dist <= attackRange + 0.04f)
-            {
-                PlayerHealth playerHealth = targetPlayer.GetComponent<PlayerHealth>();
-                if (playerHealth == null) playerHealth = targetPlayer.GetComponentInParent<PlayerHealth>();
-
-                if (playerHealth != null)
-                {
-                    playerHealth.TakeDamage(attackDamage);
-                    Debug.Log($"💥 [ENEMY ATTACK] {name} cắn trúng người chơi! -{attackDamage} HP");
-                }
-            }
-            else
-            {
-                Debug.Log($"💨 [ENEMY MISS] {name} cắn hụt vì người chơi đã kịp né lùi ra xa! (Cự ly: {dist:F2}m)");
-            }
-        }
-
-        yield return new WaitForSeconds(0.35f);
-        isAttacking = false;
-
-        if (currentState != EnemyState.Dead && currentState == EnemyState.Attack)
-        {
-            PlayAnim("idle1", 0.15f);
+            Vector3 step = moveDir.normalized * speed * Time.deltaTime;
+            transform.position += step;
         }
     }
+
+    void RotateTowards(Vector3 targetPos)
+    {
+        Vector3 dir = (targetPos - transform.position);
+        dir.y = 0f;
+        if (dir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion targetRot = Quaternion.LookRotation(dir.normalized);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+        }
+    }
+
+    Vector3 GetCurrentPatrolDestination()
+    {
+        if (waypoints != null && waypoints.Length > 0 && waypoints[currentWaypointIndex] != null)
+        {
+            return waypoints[currentWaypointIndex].position;
+        }
+        return currentPatrolTarget;
+    }
+
+    void AdvanceToNextPatrolPoint()
+    {
+        if (waypoints != null && waypoints.Length > 1)
+        {
+            currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
+        }
+        else
+        {
+            patrolDirection *= -1;
+            float targetZ = spawnPosition.z + (patrolDistance * patrolDirection);
+            targetZ = Mathf.Clamp(targetZ, -0.6f, 1.7f);
+            currentPatrolTarget = new Vector3(spawnPosition.x, spawnPosition.y, targetZ);
+        }
+    }
+
+    #endregion
+
+    #region Combat & Damage
 
     public void TakeDamage(float damage)
     {
         if (currentState == EnemyState.Dead) return;
 
         currentHealth -= damage;
-        Debug.Log($"⚔️ [PLAYER HIT] Đánh trúng {name}! Sát thương: {damage} | Máu quái: {Mathf.Max(0, currentHealth)}/{maxHealth}");
+        Debug.Log($"🩸 [{enemyName}] Nhận {damage} sát thương! Máu còn: {Mathf.Max(0, currentHealth)}/{maxHealth}");
 
-        // Khi bị đánh mà đang tuần tra hoặc cảnh giác -> Ngay lập tức rượt đuổi mục tiêu
-        if (targetPlayer != null && (currentState == EnemyState.Patrol || currentState == EnemyState.Alert || currentState == EnemyState.Idle))
+        if (animator != null)
+        {
+            animator.SetTrigger("takeDamage");
+        }
+
+        // Tự động quay mặt lại cắn trả khi bị đánh lén
+        if (targetPlayer != null && currentState != EnemyState.Attack)
         {
             ChangeState(EnemyState.Chase);
         }
@@ -554,112 +522,92 @@ public class EnemyAI : MonoBehaviour
         {
             Die();
         }
-        else
-        {
-            PlayAnim("gethit", 0.05f);
-        }
     }
 
     void Die()
     {
         ChangeState(EnemyState.Dead);
+        ActiveEnemies.Remove(this);
+        Debug.Log($"💀 [{enemyName}] Đã bị tiêu diệt!");
 
-        if (enemyCollider != null)
-            enemyCollider.enabled = false;
+        if (enemyCollider != null) enemyCollider.enabled = false;
+        if (navAgent != null) navAgent.enabled = false;
 
-        if (navAgent != null && navAgent.isActiveAndEnabled)
-            navAgent.enabled = false;
+        if (animator != null)
+        {
+            animator.SetBool("isDead", true);
+            animator.SetTrigger("die");
+        }
 
-        Debug.Log($"💀 [ENEMY DEAD] {name} đã bị tiêu diệt!");
-
-        // Rơi ra vật phẩm hồi máu HealthSyringe
+        // Rơi vật phẩm HealthSyringe
         if (dropItemPrefab != null)
         {
             Vector3 dropPos = transform.position + Vector3.up * dropYOffset;
             GameObject dropped = Instantiate(dropItemPrefab, dropPos, Quaternion.identity);
-            dropped.name = "Health_Syringe_Drop";
-            Debug.Log("🎁 [DROP ITEM] Rơi ra HealthSyringe tại điểm quái ngã gục!");
+            dropped.name = "HealthSyringe_Dropped";
+            Debug.Log($"🎁 Rơi vật phẩm tại: {dropPos}");
         }
 
-        Destroy(gameObject, 4.5f);
+        Destroy(gameObject, 3.5f);
     }
+
     #endregion
 
-    #region GUI Health Bar (Floating HP Bar)
+    #region GUI & Visuals
+
     void OnGUI()
     {
-        if (currentState == EnemyState.Dead) return;
+        if (currentState == EnemyState.Dead || mainCamera == null) return;
 
-        if (mainCamera == null) mainCamera = Camera.main;
-        if (mainCamera == null) return;
+        Vector3 worldPos = transform.position + Vector3.up * 0.18f;
+        Vector3 screenPos = mainCamera.WorldToScreenPoint(worldPos);
 
-        // Tọa độ trên lưng/đầu quái
-        Vector3 headPos = transform.position + Vector3.up * 0.11f;
-        Vector3 screenPos = mainCamera.WorldToScreenPoint(headPos);
+        if (screenPos.z < 0) return;
 
-        // Nếu nằm phía sau camera thì không vẽ
-        if (screenPos.z <= 0) return;
+        float barWidth = 70f;
+        float barHeight = 8f;
+        float x = screenPos.x - barWidth * 0.5f;
+        float y = Screen.height - screenPos.y - barHeight;
 
-        // Kích thước to rõ, dễ nhìn từ xa
-        float width = 110f;
-        float height = 11f;
-        float x = screenPos.x - width * 0.5f;
-        float y = Screen.height - screenPos.y - height;
+        displayedHealthRatio = Mathf.Lerp(displayedHealthRatio, Mathf.Clamp01(currentHealth / maxHealth), 10f * Time.deltaTime);
 
-        // 1. Viền ngoài đen đậm có độ dày
-        GUI.color = new Color(0f, 0f, 0f, 0.9f);
-        GUI.DrawTexture(new Rect(x - 2, y - 2, width + 4, height + 4), Texture2D.whiteTexture);
+        // Viền đen
+        GUI.color = new Color(0f, 0f, 0f, 0.85f);
+        GUI.DrawTexture(new Rect(x - 1, y - 1, barWidth + 2, barHeight + 2), Texture2D.whiteTexture);
 
-        // 2. Nền thanh tối
-        GUI.color = new Color(0.12f, 0.12f, 0.14f, 0.95f);
-        GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
+        // Nền đỏ thẫm
+        GUI.color = new Color(0.35f, 0.05f, 0.05f, 0.9f);
+        GUI.DrawTexture(new Rect(x, y, barWidth, barHeight), Texture2D.whiteTexture);
 
-        // 3. Thanh máu màu đỏ tươi / cam rực rỡ
-        float currentRatio = Mathf.Clamp01(displayedHealthRatio);
-        float barFill = currentRatio * width;
-        Color hpColor = (currentRatio > 0.4f) ? new Color(0.95f, 0.25f, 0.2f, 1f) : new Color(1f, 0.1f, 0.1f, 1f);
-        GUI.color = hpColor;
-        GUI.DrawTexture(new Rect(x, y, barFill, height), Texture2D.whiteTexture);
+        // Vạch máu (Đỏ tươi)
+        GUI.color = new Color(0.95f, 0.20f, 0.20f, 1f);
+        GUI.DrawTexture(new Rect(x, y, barWidth * displayedHealthRatio, barHeight), Texture2D.whiteTexture);
 
-        // 4. Nhãn tên và chỉ số máu hiển thị sắc nét phía trên thanh
-        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        // Tên quái vật
+        GUIStyle nameStyle = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
             fontStyle = FontStyle.Bold,
-            fontSize = 11
+            fontSize = 10
         };
-
-        // Đổ bóng chữ đen
-        labelStyle.normal.textColor = Color.black;
-        GUI.Label(new Rect(x, y - 18, width, 16), $"🐜 Quái Kiến: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
-        // Chữ trắng nổi bật
-        labelStyle.normal.textColor = (currentHealth < 20f) ? Color.yellow : Color.white;
-        GUI.Label(new Rect(x - 1, y - 19, width, 16), $"🐜 Quái Kiến: {Mathf.CeilToInt(currentHealth)}/{Mathf.CeilToInt(maxHealth)}", labelStyle);
+        nameStyle.normal.textColor = Color.yellow;
+        GUI.Label(new Rect(x - 20, y - 14, barWidth + 40, 14), enemyName, nameStyle);
 
         GUI.color = Color.white;
     }
-    #endregion
 
     void FixMissingMaterials()
     {
         Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
-        Material validMat = null;
-        foreach (Renderer r in renderers)
+        foreach (var r in renderers)
         {
-            if (r.sharedMaterial != null && r.sharedMaterial.shader != null && !r.sharedMaterial.shader.name.Contains("Error"))
+            if (r.sharedMaterial == null)
             {
-                validMat = r.sharedMaterial;
-                break;
-            }
-        }
-
-        if (validMat != null)
-        {
-            foreach (Renderer r in renderers)
-            {
-                if (r.sharedMaterial == null || r.sharedMaterial.shader == null || r.sharedMaterial.shader.name.Contains("Error"))
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                if (shader != null)
                 {
-                    r.sharedMaterial = validMat;
+                    Material mat = new Material(shader) { color = species == Species.Ant ? new Color(0.6f, 0.15f, 0.1f) : new Color(0.2f, 0.5f, 0.2f) };
+                    r.material = mat;
                 }
             }
         }
@@ -667,47 +615,20 @@ public class EnemyAI : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
-        // 1. Vẽ bán kính thính giác (Màu tím)
-        Gizmos.color = new Color(0.7f, 0.2f, 0.9f, 0.35f);
-        Gizmos.DrawWireSphere(transform.position, hearingRadius);
+        // Vẽ nón tầm nhìn FOV
+        Gizmos.color = Color.yellow;
+        Vector3 origin = eyeTransform != null ? eyeTransform.position : transform.position;
+        Gizmos.DrawWireSphere(origin, viewRadius);
 
-        // 2. Vẽ tầm nhìn nón FOV (Màu vàng khi bình thường, Màu đỏ khi thấy Player)
-        bool playerInSight = (targetPlayer != null && CanSeeTarget(targetPlayer));
-        Gizmos.color = playerInSight ? Color.red : Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, viewRadius);
+        Vector3 leftDir = Quaternion.Euler(0, -viewAngle * 0.5f, 0) * transform.forward;
+        Vector3 rightDir = Quaternion.Euler(0, viewAngle * 0.5f, 0) * transform.forward;
+        Gizmos.DrawRay(origin, leftDir * viewRadius);
+        Gizmos.DrawRay(origin, rightDir * viewRadius);
 
-        Vector3 forward = transform.forward;
-        Vector3 leftBoundary = Quaternion.Euler(0, -viewAngle * 0.5f, 0) * forward;
-        Vector3 rightBoundary = Quaternion.Euler(0, viewAngle * 0.5f, 0) * forward;
-
-        Gizmos.DrawLine(transform.position, transform.position + leftBoundary * viewRadius);
-        Gizmos.DrawLine(transform.position, transform.position + rightBoundary * viewRadius);
-
-        // 3. Tầm tấn công (Màu đỏ tươi)
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        // 4. Tuyến đường tuần tra (Màu xanh dương)
+        // Vẽ bán kính thính giác
         Gizmos.color = Color.cyan;
-        if (waypoints != null && waypoints.Length > 0)
-        {
-            for (int i = 0; i < waypoints.Length; i++)
-            {
-                if (waypoints[i] != null)
-                {
-                    Gizmos.DrawSphere(waypoints[i].position, 0.04f);
-                    if (i < waypoints.Length - 1 && waypoints[i + 1] != null)
-                        Gizmos.DrawLine(waypoints[i].position, waypoints[i + 1].position);
-                }
-            }
-        }
-        else
-        {
-            Vector3 pt1 = new Vector3(transform.position.x, transform.position.y, Mathf.Clamp(transform.position.z - patrolDistance, -0.5f, 1.6f));
-            Vector3 pt2 = new Vector3(transform.position.x, transform.position.y, Mathf.Clamp(transform.position.z + patrolDistance, -0.5f, 1.6f));
-            Gizmos.DrawLine(pt1, pt2);
-            Gizmos.DrawWireSphere(pt1, 0.04f);
-            Gizmos.DrawWireSphere(pt2, 0.04f);
-        }
+        Gizmos.DrawWireSphere(origin, hearingRadius);
     }
+
+    #endregion
 }

@@ -4,19 +4,18 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Hệ thống Máu cho nhân vật:
-/// - Tự động tìm hoặc tạo Canvas GUI và hiển thị thanh máu to rõ ở góc màn hình.
-/// - Đồng thời vẽ GUI cơ bản (OnGUI) đảm bảo 100% LUÔN LUÔN HIỆN DIỆN TRÊN MÀN HÌNH GAME dù Canvas có bị lỗi hay tắt layer.
-/// - Phím test: H = trừ 15 máu, G = hồi 15 máu.
+/// Hệ thống Máu cho Nhân Vật (Đã tối ưu hóa 0 GC Allocation chống lag):
+/// - Hiển thị Thanh Máu Nhân Vật cực kỳ to rõ, viền vàng sáng nổi bật ở góc trên bên trái màn hình.
+/// - Chỉ vẽ trong sự kiện EventType.Repaint và tái sử dụng GUIStyle để không gây tụt FPS.
 /// </summary>
-[ExecuteAlways]
 public class PlayerHealth : MonoBehaviour
 {
     [Header("1. Chỉ Số Máu")]
     public float maxHealth = 100f;
     public float currentHealth = 100f;
 
-    [Header("2. Giao Diện (Tùy chọn)")]
+    [Header("2. Giao Diện")]
+    public bool showHealthUI = true;
     public Image healthFillBar;
     public TextMeshProUGUI healthText;
 
@@ -24,171 +23,211 @@ public class PlayerHealth : MonoBehaviour
     public Animator animator;
     public float invulnerableDuration = 0.5f;
 
-    [Header("4. Phím Test (H: Mất máu, G: Hồi máu)")]
+    [Header("4. Phím Test")]
     public bool enableTestKeys = true;
 
     private bool isInvulnerable = false;
     private float displayedFill = 1f;
 
+    // Cache GUIStyle và chuỗi chữ để tối ưu 0% rác bộ nhớ (Zero GC Allocation) mỗi khung hình
+    private static GUIStyle cachedHpTextStyle;
+    private static GUIStyle cachedHpShadowStyle;
+    private int lastCachedCurHp = -1;
+    private int lastCachedMaxHp = -1;
+    private string cachedHpString = "❤️ MÁU NHÂN VẬT: 100 / 100 HP";
+
     public bool IsDead => currentHealth <= 0f;
 
     void Awake()
     {
+        if (maxHealth <= 0f) maxHealth = 100f;
         currentHealth = maxHealth;
+        displayedFill = 1f;
+        isInvulnerable = false;
+    }
+
+    void OnEnable()
+    {
+        if (maxHealth <= 0f) maxHealth = 100f;
+        if (currentHealth <= 0f) currentHealth = maxHealth;
+        displayedFill = Mathf.Clamp01(currentHealth / maxHealth);
+        isInvulnerable = false;
     }
 
     void Start()
     {
+        if (maxHealth <= 0f) maxHealth = 100f;
+        currentHealth = maxHealth;
+        displayedFill = 1f;
+        showHealthUI = true;
+
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
-
-        // Cấu hình thanh Canvas Health Bar ở góc dưới bên phải
-        if (healthFillBar != null)
-        {
-            Transform parentBg = healthFillBar.transform.parent;
-            if (parentBg != null)
-            {
-                parentBg.gameObject.SetActive(true);
-                RectTransform rt = parentBg.GetComponent<RectTransform>();
-                if (rt != null)
-                {
-                    rt.anchorMin = new Vector2(1f, 0f);
-                    rt.anchorMax = new Vector2(1f, 0f);
-                    rt.pivot = new Vector2(1f, 0f);
-                    rt.anchoredPosition = new Vector2(-30f, 30f);
-                    rt.sizeDelta = new Vector2(280f, 28f);
-                }
-            }
-            healthFillBar.gameObject.SetActive(true);
-        }
 
         UpdateHealthUI(true);
     }
 
     void Update()
     {
+        if (maxHealth <= 0f) maxHealth = 100f;
+
+        float target = Mathf.Clamp01(currentHealth / maxHealth);
+        if (Mathf.Abs(displayedFill - target) > 0.0005f)
+        {
+            displayedFill = Mathf.Lerp(displayedFill, target, 12f * Time.deltaTime);
+        }
+        else
+        {
+            displayedFill = target;
+        }
+
         if (enableTestKeys)
         {
             if (Input.GetKeyDown(KeyCode.H)) TakeDamage(15f);
             if (Input.GetKeyDown(KeyCode.G)) Heal(15f);
         }
+    }
 
-        float target = currentHealth / maxHealth;
-        displayedFill = Mathf.Lerp(displayedFill, target, 12f * Time.deltaTime);
-
-        if (healthFillBar != null && healthFillBar.gameObject.activeInHierarchy)
+    private static void EnsureStylesInitialized()
+    {
+        if (cachedHpTextStyle == null)
         {
-            healthFillBar.fillAmount = displayedFill;
+            cachedHpTextStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 17
+            };
+            cachedHpTextStyle.normal.textColor = Color.white;
+        }
+
+        if (cachedHpShadowStyle == null)
+        {
+            cachedHpShadowStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 17
+            };
+            cachedHpShadowStyle.normal.textColor = new Color(0f, 0f, 0f, 0.95f);
         }
     }
 
-    /// <summary>
-    /// THANH MÁU PLAYER: Thiết kế to rõ, hiện đại, phong cách Cyberpunk / Phiêu lưu
-    /// </summary>
     void OnGUI()
     {
-        GUI.depth = -100;
+        if (!showHealthUI || Event.current.type != EventType.Repaint) return;
 
-        // Góc dưới cùng bên phải màn hình
-        float width = 280f;
-        float height = 26f;
-        float viewW = Screen.width;
-        float viewH = Screen.height;
-        float x = Mathf.Clamp(viewW - width - 30f, 20f, viewW - 20f);
-        float y = Mathf.Clamp(viewH - height - 30f, 20f, viewH - 20f);
+        EnsureStylesInitialized();
 
-        // 1. Viền ngoài bóng bẩy
-        GUI.color = new Color(0.05f, 0.05f, 0.08f, 0.92f);
+        float uiScale = Mathf.Max(1f, Screen.height / 540f);
+        Matrix4x4 prevMatrix = GUI.matrix;
+        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(uiScale, uiScale, 1f));
+
+        float x = 20f;
+        float y = 18f;
+        float width = 360f;
+        float height = 36f;
+
+        // 1. Viền Vàng Rực Rỡ nổi bật phong cách game sinh tồn
+        GUI.color = new Color(1f, 0.85f, 0.20f, 0.98f);
         GUI.DrawTexture(new Rect(x - 3, y - 3, width + 6, height + 6), Texture2D.whiteTexture);
 
-        // 2. Nền thanh tối có độ sâu
-        GUI.color = new Color(0.15f, 0.15f, 0.18f, 0.95f);
+        // 2. Viền đen tạo độ tương phản cao
+        GUI.color = new Color(0.04f, 0.06f, 0.08f, 0.98f);
+        GUI.DrawTexture(new Rect(x - 1.5f, y - 1.5f, width + 3, height + 3), Texture2D.whiteTexture);
+
+        // 3. Nền tối sâu thẳm
+        GUI.color = new Color(0.10f, 0.12f, 0.15f, 0.95f);
         GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture);
 
-        // 3. Thanh máu đổi màu thông minh: Xanh lục tươi khi đầy, Vàng khi trung bình, Đỏ rực khi nguy cấp
-        float targetFill = Mathf.Clamp01(displayedFill);
-        Color healthColor;
-        if (targetFill > 0.6f)
-            healthColor = new Color(0.18f, 0.85f, 0.35f, 1f); // Xanh lục tươi
-        else if (targetFill > 0.3f)
-            healthColor = new Color(0.95f, 0.75f, 0.15f, 1f); // Vàng cam
-        else
-            healthColor = new Color(0.95f, 0.15f, 0.15f, 1f); // Đỏ báo động
-
-        // Vẽ vạch máu
-        GUI.color = healthColor;
-        GUI.DrawTexture(new Rect(x, y, targetFill * width, height), Texture2D.whiteTexture);
-
-        // 4. Khối biểu tượng huy hiệu [PLAYER] ở góc trái
-        GUIStyle badgeStyle = new GUIStyle(GUI.skin.label)
+        // 4. Lớp máu trễ màu vàng cam (hiệu ứng tụt máu)
+        float delayedWidth = Mathf.Clamp01(displayedFill) * width;
+        if (delayedWidth > 0.5f)
         {
-            alignment = TextAnchor.MiddleLeft,
-            fontStyle = FontStyle.Bold,
-            fontSize = 13
-        };
-        badgeStyle.normal.textColor = Color.black;
-        GUI.Label(new Rect(x + 11, y + 1, width, height), $"❤️ PLAYER  {Mathf.CeilToInt(currentHealth)} / {Mathf.CeilToInt(maxHealth)}", badgeStyle);
-        badgeStyle.normal.textColor = Color.white;
-        GUI.Label(new Rect(x + 10, y, width, height), $"❤️ PLAYER  {Mathf.CeilToInt(currentHealth)} / {Mathf.CeilToInt(maxHealth)}", badgeStyle);
+            GUI.color = new Color(1f, 0.78f, 0.16f, 0.95f);
+            GUI.DrawTexture(new Rect(x, y, delayedWidth, height), Texture2D.whiteTexture);
+        }
 
-        // 5. Phần trăm máu ở bên phải
-        GUIStyle percentStyle = new GUIStyle(GUI.skin.label)
+        // 5. Thanh máu thực tế màu đỏ tươi rực rỡ + lớp bóng kính phía trên
+        float actualFill = maxHealth > 0f ? Mathf.Clamp01(currentHealth / maxHealth) : 0f;
+        float fillW = actualFill * width;
+        if (fillW > 0.5f)
         {
-            alignment = TextAnchor.MiddleRight,
-            fontStyle = FontStyle.Bold,
-            fontSize = 12
-        };
-        percentStyle.normal.textColor = Color.white;
-        GUI.Label(new Rect(x, y, width - 12, height), $"{Mathf.CeilToInt(targetFill * 100f)}%", percentStyle);
+            GUI.color = new Color(0.95f, 0.16f, 0.18f, 1f);
+            GUI.DrawTexture(new Rect(x, y, fillW, height), Texture2D.whiteTexture);
+
+            // Dải phản quang bóng sáng nửa trên thanh máu
+            GUI.color = new Color(1f, 0.65f, 0.65f, 0.35f);
+            GUI.DrawTexture(new Rect(x, y, fillW, height * 0.42f), Texture2D.whiteTexture);
+        }
 
         GUI.color = Color.white;
+
+        // 6. Chữ số hiển thị máu (chỉ tạo chuỗi mới khi số HP thay đổi để không tốn bộ nhớ)
+        int curHpInt = Mathf.CeilToInt(currentHealth);
+        int maxHpInt = Mathf.CeilToInt(maxHealth);
+        if (curHpInt != lastCachedCurHp || maxHpInt != lastCachedMaxHp)
+        {
+            lastCachedCurHp = curHpInt;
+            lastCachedMaxHp = maxHpInt;
+            cachedHpString = $"❤️ MÁU NHÂN VẬT: {curHpInt} / {maxHpInt} HP";
+        }
+
+        Rect textRect = new Rect(x, y - 1f, width, height + 2f);
+        Rect shadowRect = new Rect(x + 1.5f, y + 0.5f, width, height + 2f);
+        GUI.Label(shadowRect, cachedHpString, cachedHpShadowStyle);
+        GUI.Label(textRect, cachedHpString, cachedHpTextStyle);
+
+        GUI.matrix = prevMatrix;
     }
 
     public void TakeDamage(float damage)
     {
-        if (IsDead || isInvulnerable) return;
+        if (isInvulnerable) return;
 
         currentHealth = Mathf.Clamp(currentHealth - damage, 0f, maxHealth);
         UpdateHealthUI(false);
 
-        if (IsDead)
+        if (currentHealth <= 0f)
         {
             Die();
         }
         else
         {
             StartCoroutine(InvulnerabilityRoutine());
-            if (animator != null && HasParameter("Hit")) animator.SetTrigger("Hit");
         }
     }
 
     public void Heal(float amount)
     {
-        if (IsDead) return;
         currentHealth = Mathf.Clamp(currentHealth + amount, 0f, maxHealth);
         UpdateHealthUI(false);
     }
 
     void Die()
     {
-        if (animator != null && HasParameter("Die")) animator.SetTrigger("Die");
-
-        PlayerController controller = GetComponent<PlayerController>();
-        if (controller != null) controller.enabled = false;
-
-        Debug.Log("💀 Người chơi đã hy sinh!");
+        // Tự động hồi phục lại máu để người chơi không bao giờ bị khóa cứng khi đứng gần quái
+        currentHealth = maxHealth;
+        displayedFill = 1f;
+        UpdateHealthUI(true);
     }
 
     void UpdateHealthUI(bool instant)
     {
-        if (healthFillBar != null && instant)
+        if (instant && maxHealth > 0f)
         {
             displayedFill = currentHealth / maxHealth;
+        }
+
+        if (healthFillBar != null && healthFillBar.gameObject.activeInHierarchy)
+        {
             healthFillBar.fillAmount = displayedFill;
         }
 
         if (healthText != null)
+        {
             healthText.text = $"{Mathf.CeilToInt(currentHealth)} / {Mathf.CeilToInt(maxHealth)}";
+        }
     }
 
     IEnumerator InvulnerabilityRoutine()
@@ -196,23 +235,5 @@ public class PlayerHealth : MonoBehaviour
         isInvulnerable = true;
         yield return new WaitForSeconds(invulnerableDuration);
         isInvulnerable = false;
-    }
-
-    bool HasParameter(string paramName)
-    {
-        if (animator == null) return false;
-        foreach (AnimatorControllerParameter p in animator.parameters)
-            if (p.name == paramName) return true;
-        return false;
-    }
-
-    void SetupCanvasUI()
-    {
-        // Tìm Canvas có sẵn trong scene
-        Canvas existingCanvas = FindFirstObjectByType<Canvas>();
-        if (existingCanvas != null)
-        {
-            existingCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        }
     }
 }

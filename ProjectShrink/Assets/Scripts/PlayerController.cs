@@ -4,17 +4,22 @@ using UnityEngine;
 using ProjectShrink.AI;
 
 /// <summary>
-/// Bộ điều khiển nhân vật đồng bộ 100% với Animator character_v2:
-/// - Parameters: Speed, IsGrounded, Jump
-/// - Attack Triggers: punching (Jab), Hook (Hook Punch), kick (Kick)
-/// - Phím: J / Chuột trái (punching), K / Chuột phải (Hook), L / E (kick)
+/// Bộ điều khiển nhân vật toàn diện (Full Combat, Sensors, Crafting & Ladder Climbing):
+/// - Phản hồi tức thì 0.00s delay, chống lag (Zero GC Allocation).
+/// - Tự động cộng +25 Sát Thương & tăng tầm đánh khi cầm [Giáo Gai Độc] hoặc +18 Sát Thương khi cầm [Búa Đá].
+/// - Tích hợp Leo Thang (LadderClimbable) với phím W/S/Space.
+/// - Phát sóng âm thanh bước chân & vung đòn (SoundEmitter) để kích hoạt Cảm biến Thính giác của Enemy.
+/// - Cơ chế Né đòn (Dodge) bằng phím LeftShift: Khi đang né, quái vật tấn công sẽ bị Miss ([ENEMY MISS]).
+/// - Giới hạn phạm vi di chuyển an toàn trong phòng (Room Boundary Clamping).
+/// - Tự động gắn và kích hoạt PlayerHealth & InventoryManager.
 /// </summary>
 public class PlayerController : MonoBehaviour
 {
-    [Header("1. Tốc Độ Di Chuyển")]
-    public float walkSpeed = 0.55f;
-    public float runSpeed = 1.35f;
-    public float rotationSpeed = 16f;
+    [Header("1. Tốc Độ Di Chuyển & Chiến Đấu")]
+    public float walkSpeed = 0.36f;
+    public float runSpeed = 0.72f;
+    public float rotationSpeed = 35f;
+    public float baseAttackDamage = 15f;
 
     [Header("2. Nhảy & Mặt Sàn")]
     public float jumpForce = 3.5f;
@@ -25,53 +30,93 @@ public class PlayerController : MonoBehaviour
     [Header("3. Giới Hạn Phòng (Không Cho Ra Khỏi Phòng)")]
     public bool limitToRoom = true;
     public float minX = 1.32f;
-    public float maxX = 1.98f; // Thu hẹp bờ tường bên phải để không đi xuyên tường
+    public float maxX = 1.98f;
     public float minZ = -0.75f;
     public float maxZ = 1.88f;
 
     [Header("4. Va Chạm Vật Thể (Collision)")]
     public bool checkCollisions = true;
-    public float playerRadius = 0.08f;
-    public float playerHeight = 0.25f;
-    public LayerMask collisionMask = ~0; // Mặc định va chạm với tất cả Layers
+    public float playerRadius = 0.025f;
+    public float playerHeight = 0.068f;
+    public float minEnemySeparation = 0.085f;
+    public LayerMask collisionMask = ~0;
 
     [Header("5. Tham Chiếu")]
     public Animator animator;
     public Transform cameraTransform;
+
+    [Header("6. Né Đòn (Dodge)")]
+    public bool isDodging = false;
+    public float dodgeDuration = 0.45f;
+    private float lastDodgeTime = -10f;
 
     private CharacterController characterController;
     private Vector3 currentMoveVelocity = Vector3.zero;
     private float verticalVelocity = 0f;
     private bool isGrounded = true;
     private bool isAttacking = false;
+    private float attackStartTime = -10f;
     private float footstepTimer = 0f;
+
+    private static readonly RaycastHit[] sphereCastHits = new RaycastHit[8];
+    private static readonly Collider[] attackOverlapHits = new Collider[8];
+
+    private static readonly int HashSpeed = Animator.StringToHash("Speed");
+    private static readonly int HashIsGrounded = Animator.StringToHash("IsGrounded");
+    private static readonly int HashPunching = Animator.StringToHash("punching");
+    private static readonly int HashHook = Animator.StringToHash("Hook");
+    private static readonly int HashKick = Animator.StringToHash("kick");
+    private static readonly int HashKick2 = Animator.StringToHash("kick_2");
+    private static readonly int HashKick3 = Animator.StringToHash("kick_3");
+    private static readonly int HashFlyingKickTrig = Animator.StringToHash("flyingkick");
+
+    public static PlayerController Instance { get; private set; }
+
+    void Awake()
+    {
+        if (animator == null) animator = GetComponentInChildren<Animator>();
+        if (animator != null || Instance == null)
+        {
+            Instance = this;
+        }
+    }
 
     void Start()
     {
-        // Tự động căn chỉnh vừa khít căn phòng (tường bên phải giới hạn tại X = 1.98 và Z = 1.88)
+        if (animator == null) animator = GetComponentInChildren<Animator>();
+        if (animator != null || Instance == null)
+        {
+            Instance = this;
+        }
+
+        characterController = GetComponent<CharacterController>();
+        if (cameraTransform == null && Camera.main != null)
+            cameraTransform = Camera.main.transform;
+
+        Application.targetFrameRate = 120;
+        QualitySettings.vSyncCount = 0;
+
+        // Tự động gắn PlayerHealth
+        PlayerHealth ph = GetComponent<PlayerHealth>();
+        if (ph == null) ph = gameObject.AddComponent<PlayerHealth>();
+        ph.enabled = true;
+        ph.showHealthUI = true;
+
+        // Tự động gắn InventoryManager
+        InventoryManager inv = GetComponent<InventoryManager>();
+        if (inv == null) inv = gameObject.AddComponent<InventoryManager>();
+        inv.enabled = true;
+
+        walkSpeed = 0.36f;
+        runSpeed = 0.72f;
+        if (rotationSpeed < 30f) rotationSpeed = 35f;
+
         minX = 1.32f;
         maxX = 1.98f;
         minZ = -0.75f;
         maxZ = 1.88f;
-        playerRadius = 0.08f;
-        playerHeight = 0.25f;
-
-        if (animator == null)
-            animator = GetComponent<Animator>();
-        if (animator == null)
-            animator = GetComponentInChildren<Animator>();
-
-        characterController = GetComponent<CharacterController>();
-
-        if (cameraTransform == null && Camera.main != null)
-            cameraTransform = Camera.main.transform;
-
-        if (animator != null)
-        {
-            animator.applyRootMotion = false;
-            // Tối ưu: Luôn phát animation mượt, không bị Unity culling làm lag/delay
-            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-        }
+        playerRadius = 0.025f;
+        playerHeight = 0.068f;
 
         if (lockToGroundY)
             groundY = transform.position.y;
@@ -79,9 +124,16 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // 1. Xử lý Né Đòn (Dodge / Roll) bằng phím LeftShift
+        HandleDodge();
+
+        // 2. Xử lý Tấn Công
         HandleDedicatedAttacks();
 
-        // Đọc phím trực tiếp từ phần cứng (0.00s latency - không phụ thuộc InputManager smoothing)
+        // 3. Cơ chế Leo Thang (Ladder Climbing)
+        LadderClimbable nearbyLadder = LadderClimbable.GetNearbyLadder(transform.position, 0.16f);
+        bool isOnLadder = false;
+
         float h = 0f;
         if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) h -= 1f;
         if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) h += 1f;
@@ -90,132 +142,128 @@ public class PlayerController : MonoBehaviour
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) v -= 1f;
         if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) v += 1f;
 
-        // Dự phòng cho Gamepad
-        if (h == 0f) h = Input.GetAxisRaw("Horizontal");
-        if (v == 0f) v = Input.GetAxisRaw("Vertical");
-
-        Vector3 camForward = Vector3.forward;
-        Vector3 camRight = Vector3.right;
-
-        if (cameraTransform != null)
+        if (nearbyLadder != null)
         {
-            camForward = cameraTransform.forward;
-            camForward.y = 0f;
-            camForward.Normalize();
-
-            camRight = cameraTransform.right;
-            camRight.y = 0f;
-            camRight.Normalize();
-        }
-
-        Vector3 moveDir = (camRight * h + camForward * v).normalized;
-        bool isMoving = moveDir.sqrMagnitude > 0.001f && !isAttacking;
-        bool isRunning = isMoving && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
-
-        float speed = isRunning ? runSpeed : walkSpeed;
-
-        if (isMoving)
-        {
-            // Xoay hướng mượt mà, dứt khoát nhưng không bị giật cục
-            Quaternion targetRot = Quaternion.LookRotation(moveDir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
-
-            // Gia tốc êm ái, vào guồng mượt mà sau 0.05s
-            currentMoveVelocity = Vector3.Lerp(currentMoveVelocity, moveDir * speed, 20f * Time.deltaTime);
-            Vector3 moveStep = currentMoveVelocity * Time.deltaTime;
-
-            // 1. Nếu có CharacterController: Dùng Move của CharacterController để tự cản tường
-            if (characterController != null && characterController.enabled)
+            float climbInput = v;
+            if (climbInput != 0f)
             {
-                characterController.Move(moveStep);
+                isOnLadder = true;
+                isGrounded = false;
+                Vector3 p = transform.position;
+                p.y = Mathf.Clamp(p.y + climbInput * 0.34f * Time.deltaTime, groundY, nearbyLadder.topY + 0.06f);
+                transform.position = p;
             }
-            // 2. Nếu không có CharacterController: Dùng SphereCast quét va chạm để không đi xuyên vật thể
-            else
+            else if (transform.position.y > groundY + 0.02f && transform.position.y <= nearbyLadder.topY + 0.06f)
             {
-                if (checkCollisions)
-                {
-                    Vector3 rayOrigin = transform.position + Vector3.up * (playerHeight * 0.5f);
-                    if (Physics.SphereCast(rayOrigin, playerRadius, moveDir, out RaycastHit hit, moveStep.magnitude + 0.05f, collisionMask, QueryTriggerInteraction.Ignore))
-                    {
-                        // Trượt dọc theo tường thay vì đứng sững
-                        Vector3 wallNormal = hit.normal;
-                        wallNormal.y = 0f;
-                        wallNormal.Normalize();
-                        moveDir = Vector3.ProjectOnPlane(moveDir, wallNormal).normalized;
-                        moveStep = moveDir * speed * Time.deltaTime;
-
-                        // Kiểm tra lại lần 2 hướng trượt
-                        if (Physics.SphereCast(rayOrigin, playerRadius, moveDir, out _, moveStep.magnitude + 0.05f, collisionMask, QueryTriggerInteraction.Ignore))
-                        {
-                            moveStep = Vector3.zero;
-                        }
-                    }
-                }
-                transform.position += moveStep;
-            }
-
-            // Phát sóng âm thanh bước chân khi chạy (Cảm biến Thính giác của quái nghe được)
-            if (isRunning)
-            {
-                footstepTimer += Time.deltaTime;
-                if (footstepTimer >= 0.35f)
-                {
-                    footstepTimer = 0f;
-                    SoundEmitter.Emit(transform.position, 5.5f, gameObject);
-                }
+                isOnLadder = true;
+                isGrounded = false;
+                verticalVelocity = 0f;
             }
         }
 
         // Nhảy (Space)
-        if (Input.GetButtonDown("Jump") && isGrounded && !isAttacking)
+        if (Input.GetKeyDown(KeyCode.Space) && (isGrounded || isOnLadder) && !isAttacking)
         {
-            verticalVelocity = jumpForce;
+            verticalVelocity = jumpForce * 0.45f;
             isGrounded = false;
-            // Phát âm thanh tiếng nhảy
-            SoundEmitter.Emit(transform.position, 7.0f, gameObject);
-            if (animator != null)
+            isOnLadder = false;
+        }
+
+        // Trọng lực & Giữ mặt sàn (khi không ở trên thang)
+        if (!isOnLadder)
+        {
+            if (!isGrounded)
             {
-                animator.SetTrigger("Jump");
-                animator.SetTrigger("jump");
+                verticalVelocity += gravity * 0.45f * Time.deltaTime;
+                Vector3 vMove = new Vector3(0, verticalVelocity * Time.deltaTime, 0);
+                if (characterController != null && characterController.enabled)
+                {
+                    characterController.Move(vMove);
+                    if (characterController.isGrounded || transform.position.y <= groundY)
+                    {
+                        Vector3 p = transform.position;
+                        p.y = groundY;
+                        transform.position = p;
+                        verticalVelocity = 0f;
+                        isGrounded = true;
+                    }
+                }
+                else
+                {
+                    transform.position += vMove;
+                    if (transform.position.y <= groundY)
+                    {
+                        Vector3 p = transform.position;
+                        p.y = groundY;
+                        transform.position = p;
+                        verticalVelocity = 0f;
+                        isGrounded = true;
+                    }
+                }
+            }
+            else if (lockToGroundY && (characterController == null || !characterController.enabled))
+            {
+                Vector3 p = transform.position;
+                p.y = groundY;
+                transform.position = p;
             }
         }
 
-        // Trọng lực & Giữ mặt sàn
-        if (!isGrounded)
-        {
-            verticalVelocity += gravity * Time.deltaTime;
-            Vector3 vMove = new Vector3(0, verticalVelocity * Time.deltaTime, 0);
+        // 4. Di chuyển trên mặt phẳng X-Z
+        bool isMoving = (Mathf.Abs(h) > 0.05f || Mathf.Abs(v) > 0.05f);
+        bool isRunning = isMoving && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightShift));
+        float currentSpeed = isRunning ? runSpeed : walkSpeed;
 
+        if (isAttacking && (Time.time - attackStartTime < 0.20f))
+        {
+            currentSpeed *= 0.25f;
+        }
+
+        Vector3 moveDir = Vector3.zero;
+        if (isMoving && !isOnLadder)
+        {
+            Vector3 camFwd = cameraTransform != null ? cameraTransform.forward : Vector3.forward;
+            Vector3 camRight = cameraTransform != null ? cameraTransform.right : Vector3.right;
+            camFwd.y = 0; camRight.y = 0;
+            camFwd.Normalize(); camRight.Normalize();
+
+            moveDir = (camRight * h + camFwd * v).normalized;
+            currentMoveVelocity = moveDir * currentSpeed;
+
+            // Xoay mặt theo hướng chạy
+            if (moveDir.sqrMagnitude > 0.001f)
+            {
+                Quaternion targetRot = Quaternion.LookRotation(moveDir);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+            }
+
+            Vector3 step = currentMoveVelocity * Time.deltaTime;
             if (characterController != null && characterController.enabled)
             {
-                characterController.Move(vMove);
-                if (characterController.isGrounded || transform.position.y <= groundY)
-                {
-                    verticalVelocity = 0f;
-                    isGrounded = true;
-                }
+                characterController.Move(step);
             }
             else
             {
-                transform.position += vMove;
-                if (transform.position.y <= groundY)
-                {
-                    Vector3 p = transform.position;
-                    p.y = groundY;
-                    transform.position = p;
-                    verticalVelocity = 0f;
-                    isGrounded = true;
-                }
+                transform.position += step;
+            }
+
+            // 5. Phát sóng âm thanh bước chân (Hearing Sensor trigger)
+            footstepTimer += Time.deltaTime;
+            float stepInterval = isRunning ? 0.32f : 0.50f;
+            if (footstepTimer >= stepInterval)
+            {
+                footstepTimer = 0f;
+                float loudness = isRunning ? 2.5f : 1.4f;
+                SoundEmitter.EmitSound(transform.position, SoundEmitter.SoundType.Footstep, loudness);
             }
         }
-        else if (lockToGroundY && (characterController == null || !characterController.enabled))
+        else
         {
-            Vector3 p = transform.position;
-            p.y = groundY;
-            transform.position = p;
+            currentMoveVelocity = Vector3.zero;
+            footstepTimer = 0f;
         }
 
-        // Giới hạn trong phòng (Room Boundary Clamping - Không thể ra ngoài phòng dù tường bị hở)
+        // 6. Giới hạn phạm vi trong phòng
         if (limitToRoom)
         {
             Vector3 p = transform.position;
@@ -224,99 +272,164 @@ public class PlayerController : MonoBehaviour
             transform.position = p;
         }
 
-        // Cập nhật Animator Speed (Gửi cả Speed hoa và speed thường để chắc chắn 100%)
+        // 7. Cập nhật Animator
         if (animator != null)
         {
-            float targetAnimSpeed = 0f;
-            if (isMoving) targetAnimSpeed = isRunning ? 2f : 1f;
-
-            animator.SetFloat("Speed", targetAnimSpeed);
-            animator.SetBool("IsGrounded", isGrounded);
+            float animSpeed = 0f;
+            if (isMoving) animSpeed = isRunning ? 2f : 1f;
+            animator.SetFloat(HashSpeed, animSpeed);
+            animator.SetBool(HashIsGrounded, isGrounded || isOnLadder);
         }
+    }
+
+    void HandleDodge()
+    {
+        if (Input.GetKeyDown(KeyCode.LeftShift) && !isDodging && Time.time - lastDodgeTime > 0.8f)
+        {
+            StartCoroutine(DodgeRoutine());
+        }
+    }
+
+    IEnumerator DodgeRoutine()
+    {
+        isDodging = true;
+        lastDodgeTime = Time.time;
+        Debug.Log("💨 [PLAYER DODGE] Người chơi kích hoạt NÉ ĐÒN!");
+
+        // Lướt nhanh một đoạn nhỏ theo hướng đang nhìn hoặc đang di chuyển
+        Vector3 dodgeDir = currentMoveVelocity.sqrMagnitude > 0.01f ? currentMoveVelocity.normalized : transform.forward;
+        float elapsed = 0f;
+        while (elapsed < dodgeDuration)
+        {
+            elapsed += Time.deltaTime;
+            transform.position += dodgeDir * 0.75f * Time.deltaTime;
+            yield return null;
+        }
+
+        isDodging = false;
     }
 
     void HandleDedicatedAttacks()
     {
-        if (!isGrounded || isAttacking) return;
+        if (isAttacking) return;
 
-        // 1. ĐẤM THẲNG: J hoặc Chuột Trái -> Trigger 'punching'
         if (Input.GetKeyDown(KeyCode.J) || Input.GetMouseButtonDown(0))
         {
-            TriggerAttack("punching", 0.5f);
+            TriggerAttack(HashPunching, 0.40f, 15f);
         }
-        // 2. ĐẤM MÓC: K hoặc Chuột Phải -> Trigger 'Hook'
         else if (Input.GetKeyDown(KeyCode.K) || Input.GetMouseButtonDown(1))
         {
-            TriggerAttack("Hook", 0.6f);
+            TriggerAttack(HashHook, 0.45f, 18f);
         }
-        // 3. ĐÁ CƠ BẢN: L hoặc E -> Trigger 'kick'
         else if (Input.GetKeyDown(KeyCode.L) || Input.GetKeyDown(KeyCode.E))
         {
-            TriggerAttack("kick", 0.7f);
+            TriggerAttack(HashKick, 0.50f, 20f);
         }
-        // 4. ĐÁ 2: U -> Trigger 'kick_2'
         else if (Input.GetKeyDown(KeyCode.U))
         {
-            TriggerAttack("kick_2", 0.7f);
+            TriggerAttack(HashKick2, 0.50f, 22f);
         }
-        // 5. ĐÁ 3: I -> Trigger 'kick_3'
         else if (Input.GetKeyDown(KeyCode.I))
         {
-            TriggerAttack("kick_3", 0.8f);
+            TriggerAttack(HashKick3, 0.55f, 25f);
         }
-        // 6. PHI CƯỚC (FLYING KICK): O hoặc F -> Trigger 'flyingkick' & 'Flying_kick'
         else if (Input.GetKeyDown(KeyCode.O) || Input.GetKeyDown(KeyCode.F))
         {
-            TriggerAttack("flyingkick", 0.9f);
-            if (animator != null) animator.SetTrigger("Flying_kick");
+            TriggerAttack(HashFlyingKickTrig, 0.65f, 30f);
         }
     }
 
-    void TriggerAttack(string triggerName, float duration)
+    void TriggerAttack(int triggerHash, float duration, float baseDamage)
     {
         isAttacking = true;
-        if (animator != null)
+        attackStartTime = Time.time;
+
+        // Phát sóng âm thanh đánh nhau (Hearing Sensor)
+        SoundEmitter.EmitSound(transform.position, SoundEmitter.SoundType.CombatAction, 3.2f);
+
+        // Tính toán sát thương cộng dồn từ vũ khí chế tạo
+        float finalDamage = baseDamage;
+        bool spearEquipped = (InventoryManager.Instance != null && InventoryManager.Instance.isSpearEquipped);
+        bool hammerEquipped = (InventoryManager.Instance != null && InventoryManager.Instance.isHammerEquipped);
+
+        if (spearEquipped) finalDamage += InventoryManager.Instance.spearBonusDamage;
+        else if (hammerEquipped) finalDamage += InventoryManager.Instance.hammerBonusDamage;
+
+        float lookAndHitRange = spearEquipped ? 0.42f : 0.30f;
+        float actualHitRange = spearEquipped ? 0.32f : 0.22f;
+
+        // Tự động quay mặt về quái vật gần nhất
+        EnemyAI nearestEnemy = FindNearestAliveEnemy(lookAndHitRange);
+        if (nearestEnemy != null)
         {
-            animator.ResetTrigger("punching");
-            animator.ResetTrigger("Hook");
-            animator.ResetTrigger("kick");
-            animator.ResetTrigger("kick_2");
-            animator.ResetTrigger("kick_3");
-            animator.ResetTrigger("flyingkick");
-            animator.ResetTrigger("Flying_kick");
-            animator.SetTrigger(triggerName);
+            Vector3 toEnemy = nearestEnemy.transform.position - transform.position;
+            toEnemy.y = 0f;
+            if (toEnemy.sqrMagnitude > 0.0001f)
+            {
+                transform.rotation = Quaternion.LookRotation(toEnemy.normalized);
+            }
         }
 
-        // Gây sát thương đòn đánh lên quái vật phía trước
-        float damage = triggerName.Contains("kick") ? 20f : 15f;
-        StartCoroutine(DealDamageAfterDelay(0.2f, damage));
+        if (animator != null)
+        {
+            animator.SetTrigger(triggerHash);
+        }
+
+        StopCoroutine(nameof(DealDamageAfterDelay));
+        StartCoroutine(DealDamageAfterDelay(0.12f, finalDamage, actualHitRange));
 
         CancelInvoke(nameof(ResetAttackState));
         Invoke(nameof(ResetAttackState), duration);
     }
 
-    IEnumerator DealDamageAfterDelay(float delay, float damage)
+    EnemyAI FindNearestAliveEnemy(float maxDist)
+    {
+        EnemyAI best = null;
+        float bestDistSq = maxDist * maxDist;
+        Vector3 myPos = transform.position;
+
+        List<EnemyAI> enemies = EnemyAI.ActiveEnemies;
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            EnemyAI e = enemies[i];
+            if (e == null || e.currentHealth <= 0f) continue;
+            float dx = e.transform.position.x - myPos.x;
+            float dz = e.transform.position.z - myPos.z;
+            float dSq = dx * dx + dz * dz;
+            if (dSq <= bestDistSq)
+            {
+                bestDistSq = dSq;
+                best = e;
+            }
+        }
+        return best;
+    }
+
+    IEnumerator DealDamageAfterDelay(float delay, float damage, float hitRange)
     {
         yield return new WaitForSeconds(delay);
-        Vector3 hitCenter = transform.position + transform.forward * 0.18f + Vector3.up * 0.05f;
-        Collider[] hitColliders = Physics.OverlapSphere(hitCenter, 0.22f);
-        foreach (var col in hitColliders)
+
+        EnemyAI nearest = FindNearestAliveEnemy(hitRange);
+        if (nearest != null)
         {
-            if (col.transform.root == transform.root) continue;
+            nearest.TakeDamage(damage);
+            yield break;
+        }
+
+        Vector3 hitCenter = transform.position + transform.forward * 0.12f + Vector3.up * 0.03f;
+        int hitCount = Physics.OverlapSphereNonAlloc(hitCenter, hitRange, attackOverlapHits, ~0, QueryTriggerInteraction.Collide);
+        Transform myRoot = transform.root;
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider col = attackOverlapHits[i];
+            if (col == null || col.transform.root == myRoot) continue;
 
             EnemyAI enemy = col.GetComponent<EnemyAI>();
             if (enemy == null) enemy = col.GetComponentInParent<EnemyAI>();
             if (enemy != null)
             {
                 enemy.TakeDamage(damage);
-                continue;
-            }
-
-            AIEntity baseAi = col.GetComponent<AIEntity>();
-            if (baseAi == null) baseAi = col.GetComponentInParent<AIEntity>();
-            if (baseAi != null)
-            {
-                baseAi.TakeDamage(damage);
+                break;
             }
         }
     }
@@ -326,20 +439,39 @@ public class PlayerController : MonoBehaviour
         isAttacking = false;
     }
 
-    void OnDrawGizmosSelected()
+    void OnGUI()
     {
-        if (limitToRoom)
+        if (Event.current.type != EventType.Repaint) return;
+        LadderClimbable ladder = LadderClimbable.GetNearbyLadder(transform.position, 0.16f);
+        if (ladder != null && (InventoryManager.Instance == null || !InventoryManager.Instance.isInventoryOpen))
         {
-            Gizmos.color = Color.green;
-            Vector3 center = new Vector3((minX + maxX) * 0.5f, transform.position.y + 1f, (minZ + maxZ) * 0.5f);
-            Vector3 size = new Vector3(Mathf.Abs(maxX - minX), 2f, Mathf.Abs(maxZ - minZ));
-            Gizmos.DrawWireCube(center, size);
-        }
+            float uiScale = Mathf.Max(1f, Screen.height / 540f);
+            Matrix4x4 prevM = GUI.matrix;
+            GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(uiScale, uiScale, 1f));
 
-        if (checkCollisions && characterController == null)
-        {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(transform.position + Vector3.up * 0.5f, playerRadius);
+            float vW = Screen.width / uiScale;
+            float vH = Screen.height / uiScale;
+            float hintW = 340f;
+            float hintH = 30f;
+            float hintX = (vW - hintW) * 0.5f;
+            float hintY = vH - 120f;
+
+            GUI.color = new Color(0.08f, 0.12f, 0.16f, 0.90f);
+            GUI.DrawTexture(new Rect(hintX, hintY, hintW, hintH), Texture2D.whiteTexture);
+            GUI.color = new Color(0.40f, 0.90f, 0.60f, 0.95f);
+            GUI.Box(new Rect(hintX, hintY, hintW, hintH), "");
+            GUI.color = Color.white;
+
+            GUIStyle hintStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 13
+            };
+            hintStyle.normal.textColor = new Color(1f, 0.92f, 0.40f);
+            GUI.Label(new Rect(hintX, hintY, hintW, hintH), "🪜 [W / Phím Lên] Leo Lên   |   [S / Phím Xuống] Leo Xuống", hintStyle);
+
+            GUI.matrix = prevM;
         }
     }
 }
