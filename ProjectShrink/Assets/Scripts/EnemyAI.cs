@@ -94,6 +94,27 @@ public class EnemyAI : MonoBehaviour
 
     public EnemyState CurrentState => currentState;
 
+    
+    /// <summary>
+    /// Đồng bộ chỉ số máu, sát thương, tốc độ quái từ Web Server & Backend
+    /// </summary>
+    public void ApplyServerConfig()
+    {
+        string lookupId = species == Species.Ant ? "ant" : "beetle";
+        if (InventoryManager.ServerEnemyCache != null)
+        {
+            if (InventoryManager.ServerEnemyCache.TryGetValue(lookupId, out var info) ||
+                InventoryManager.ServerEnemyCache.TryGetValue(enemyName.ToLower(), out info))
+            {
+                if (info.hp > 0f) { maxHealth = info.hp; currentHealth = Mathf.Min(currentHealth, maxHealth); }
+                if (info.damage > 0f) attackDamage = info.damage;
+                if (info.speed > 0f) { patrolSpeed = info.speed; chaseSpeed = info.speed * 2f; }
+                if (info.attackRange > 0f) attackRange = info.attackRange;
+                if (info.detectionRange > 0f) viewRadius = info.detectionRange;
+            }
+        }
+    }
+
     void Awake()
     {
         if (maxHealth <= 0f) maxHealth = 45f;
