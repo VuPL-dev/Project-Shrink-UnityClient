@@ -37,7 +37,7 @@ namespace ProjectShrink.Config
             public float punchDamage = 15f;
             public float kickDamage = 25f;
 
-            public float enemyHealth = 50f;
+            public float enemyHealth = 100f;
             public float enemyDamage = 15f;
             public float patrolSpeed = 0.35f;
             public float chaseSpeed = 0.85f;
@@ -149,8 +149,19 @@ namespace ProjectShrink.Config
             foreach (var enemy in enemies)
             {
                 if (enemy == null) continue;
-                enemy.maxHealth = data.enemyHealth;
-                enemy.currentHealth = Mathf.Min(enemy.currentHealth, enemy.maxHealth);
+                if (data.enemyHealth > 0f)
+                {
+                    float oldMax = enemy.maxHealth;
+                    enemy.maxHealth = data.enemyHealth;
+                    if (enemy.currentHealth >= oldMax - 0.5f)
+                    {
+                        enemy.currentHealth = enemy.maxHealth;
+                    }
+                    else
+                    {
+                        enemy.currentHealth = Mathf.Min(enemy.currentHealth, enemy.maxHealth);
+                    }
+                }
                 enemy.attackDamage = data.enemyDamage;
                 enemy.patrolSpeed = data.patrolSpeed;
                 enemy.chaseSpeed = data.chaseSpeed;

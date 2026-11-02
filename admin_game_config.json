@@ -1,0 +1,314 @@
+{
+  "characterAttrs": {
+    "maxHP": 100,
+    "attackDamage": 15,
+    "jumpForce": 5,
+    "walkSpeed": 0.36,
+    "runSpeed": 0.72
+  },
+  "enemies": [
+    {
+      "enemyId": "Ant",
+      "name": "Quái Kiến",
+      "hp": 100,
+      "damage": 15,
+      "speed": 0.15,
+      "attackRange": 0.16,
+      "detectionRange": 0.7,
+      "dropItemId": "long_bone",
+      "dropRate": 0.9
+    },
+    {
+      "enemyId": "Beetle",
+      "name": "Bọ Cánh Cứng Độc",
+      "hp": 40,
+      "damage": 12,
+      "speed": 0.14,
+      "attackRange": 0.13,
+      "detectionRange": 0.5,
+      "dropItemId": "spider_silk",
+      "dropRate": 0.8
+    }
+  ],
+  "globalConfig": {
+    "gameSpeed": 1,
+    "enemyDamageMultiplier": 1,
+    "playerHealthBase": 100
+  },
+  "items": [
+    {
+      "itemId": "poison_thorn",
+      "name": "Gai Độc",
+      "description": "Mũi gai chứa độc tính của quái vật rơi ra khi đánh bại",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "spider_silk",
+      "name": "Mạng Nhện",
+      "description": "Tơ nhện siêu dai dùng để kết dính các vật phẩm chế tạo",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "long_bone",
+      "name": "Khúc Xương Dài",
+      "description": "Khúc xương cứng cáp dùng làm cán vũ khí hoặc khung dựng",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "coal",
+      "name": "Than Đen",
+      "description": "Than đá có khả năng bắt lửa cháy bền bỉ",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "stick",
+      "name": "Cây Gậy Gỗ",
+      "description": "Cành cây nhỏ dùng làm khung và cán công cụ",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "rope",
+      "name": "Dây Thừng",
+      "description": "Dây thừng bện chắc chắn để buộc và gia cố đồ vật",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "cloth",
+      "name": "Vải Bền",
+      "description": "Mảnh vải dệt dùng để chế tạo Balo và băng bó",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "wood",
+      "name": "Khối Gỗ",
+      "description": "Gỗ thân cây vững chắc dùng làm đế và khung chế tạo",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "stone",
+      "name": "Khối Đá",
+      "description": "Đá cuội cứng dùng làm đầu búa hoặc nghiền vật liệu",
+      "type": "Material",
+      "rarity": "Common",
+      "maxStack": 64
+    },
+    {
+      "itemId": "health_syringe",
+      "name": "Ống Tiêm Hồi Máu",
+      "description": "Hồi phục ngay lập tức 40 HP cho nhân vật",
+      "type": "Consumable",
+      "rarity": "Uncommon",
+      "maxStack": 16,
+      "attributes": {
+        "hpRestore": 40,
+        "damage": 0
+      }
+    },
+    {
+      "itemId": "poison_thorn_spear",
+      "name": "Giáo Gai Độc",
+      "description": "Vũ khí tầm đánh xa gây +25 sát thương và tẩm độc",
+      "type": "Weapon",
+      "rarity": "Rare",
+      "maxStack": 1,
+      "attributes": {
+        "damage": 25,
+        "defense": 0
+      }
+    },
+    {
+      "itemId": "torch",
+      "name": "Đuốc Phát Sáng",
+      "description": "Chiếu sáng không gian tăm tối xung quanh nhân vật",
+      "type": "Tool",
+      "rarity": "Common",
+      "maxStack": 16
+    },
+    {
+      "itemId": "ladder",
+      "name": "Thang Leo",
+      "description": "Đặt xuống đất để leo lên các vị trí kệ cao trong căn phòng",
+      "type": "Tool",
+      "rarity": "Common",
+      "maxStack": 16
+    },
+    {
+      "itemId": "backpack",
+      "name": "Balo 24 Ô",
+      "description": "Mở rộng sức chứa túi đồ từ 12 lên 24 ô",
+      "type": "Equipment",
+      "rarity": "Uncommon",
+      "maxStack": 1
+    },
+    {
+      "itemId": "stone_hammer",
+      "name": "Búa Đá Chiến",
+      "description": "Vũ khí cận chiến nặng gây +18 sát thương đập mạnh",
+      "type": "Weapon",
+      "rarity": "Uncommon",
+      "maxStack": 1,
+      "attributes": {
+        "damage": 18,
+        "defense": 0
+      }
+    },
+    {
+      "itemId": "bandage",
+      "name": "Băng Gạc Y Tế",
+      "description": "Cuộn băng gạc y tế quấn vết thương, hồi phục 25 HP",
+      "type": "Consumable",
+      "rarity": "Common",
+      "maxStack": 16,
+      "attributes": {
+        "hpRestore": 25,
+        "damage": 0
+      }
+    }
+  ],
+  "recipes": [
+    {
+      "recipeId": "recipe_poison_thorn_spear",
+      "name": "Giáo Gai Độc",
+      "description": "Cán Xương Dài buộc Mạng Nhện và mũi Gai Độc cực bén.",
+      "outputItemId": "poison_thorn_spear",
+      "outputQuantity": 1,
+      "craftingTimeSeconds": 2,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "poison_thorn",
+          "quantity": 1
+        },
+        {
+          "itemId": "spider_silk",
+          "quantity": 1
+        },
+        {
+          "itemId": "long_bone",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "recipeId": "recipe_torch",
+      "name": "Đuốc Phát Sáng",
+      "description": "Than Đen kết hợp Cây Gậy tạo thành đuốc soi sáng.",
+      "outputItemId": "torch",
+      "outputQuantity": 4,
+      "craftingTimeSeconds": 2,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "coal",
+          "quantity": 1
+        },
+        {
+          "itemId": "stick",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "recipeId": "recipe_ladder",
+      "name": "Thang Leo",
+      "description": "Gậy và Dây Thừng bện thành thang leo lên các kệ, đồ vật cao.",
+      "outputItemId": "ladder",
+      "outputQuantity": 2,
+      "craftingTimeSeconds": 3,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "stick",
+          "quantity": 2
+        },
+        {
+          "itemId": "rope",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "recipeId": "recipe_backpack",
+      "name": "Balo 24 Ô",
+      "description": "Dây Thừng thắt các tấm Vải bền tạo thành Balo phiêu lưu.",
+      "outputItemId": "backpack",
+      "outputQuantity": 1,
+      "craftingTimeSeconds": 5,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "rope",
+          "quantity": 1
+        },
+        {
+          "itemId": "wood",
+          "quantity": 1
+        },
+        {
+          "itemId": "cloth",
+          "quantity": 5
+        }
+      ]
+    },
+    {
+      "recipeId": "recipe_stone_hammer",
+      "name": "Búa Đá Chiến",
+      "description": "Khối Đá mài sắc buộc chặt vào Cây Gậy bằng Dây Thừng.",
+      "outputItemId": "stone_hammer",
+      "outputQuantity": 1,
+      "craftingTimeSeconds": 4,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "stone",
+          "quantity": 1
+        },
+        {
+          "itemId": "rope",
+          "quantity": 1
+        },
+        {
+          "itemId": "stick",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "recipeId": "recipe_bandage",
+      "name": "Băng Gạc Cứu Thương",
+      "description": "",
+      "outputItemId": "bandage",
+      "outputQuantity": 2,
+      "craftingTimeSeconds": 2,
+      "requiredStation": "HAND_CRAFT",
+      "isActive": true,
+      "ingredients": [
+        {
+          "itemId": "cloth",
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}
