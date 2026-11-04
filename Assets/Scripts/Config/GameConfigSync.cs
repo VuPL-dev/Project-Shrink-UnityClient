@@ -25,6 +25,10 @@ namespace ProjectShrink.Config
         [SerializeField] private bool isSuccess = false;
         [SerializeField] private string lastSyncMessage = "Chưa đồng bộ";
 
+        public bool IsSyncing => isSyncing;
+        public bool IsSuccess => isSuccess;
+        public string LastSyncMessage => lastSyncMessage;
+
         [Header("3. Thông Số Runtime Đã Nhận")]
         public GameAttributesData currentAttributes = new GameAttributesData();
 
@@ -46,6 +50,7 @@ namespace ProjectShrink.Config
             public float hearingRadius = 8.0f;
         }
 
+#pragma warning disable 0649
         [System.Serializable]
         private class ApiResponseWrapper
         {
@@ -53,6 +58,7 @@ namespace ProjectShrink.Config
             public string message;
             public GameAttributesData data;
         }
+#pragma warning restore 0649
 
         void Start()
         {
