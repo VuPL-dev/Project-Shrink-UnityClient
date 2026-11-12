@@ -183,8 +183,8 @@ namespace ProjectShrink.Security
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(uiScale, uiScale, 1f));
 
             float vW = Screen.width / uiScale;
-            float boxW = 310f;
-            float boxH = 74f;
+            float boxW = 385f;
+            float boxH = 78f;
             float boxX = vW - boxW - 18f;
             float boxY = 18f;
 

@@ -22,26 +22,44 @@ public class SetupRoom4Security
     private const string ScenePath = "Assets/Scenes/Room4_Security.unity";
     private const string DronePrefabPath = "Assets/Prefabs/SecurityDrone.prefab";
 
+    private const string AutoBuildKey = "Room4_AutoBuilt_v3";
+
     [InitializeOnLoadMethod]
     private static void AutoCreateRoom4Once()
     {
+        EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+        EditorApplication.playModeStateChanged += OnPlayModeChanged;
+
         EditorApplication.delayCall += () =>
         {
-            if (Application.isPlaying) return;
-            if (File.Exists(ScenePath) && File.Exists(DronePrefabPath) && SessionState.GetBool("Room4_AutoBuilt_v2", false)) return;
-            SessionState.SetBool("Room4_AutoBuilt_v2", true);
-
-            // Lưu Scene hiện tại (nếu là SampleScene thì tự động đặt thêm Cửa Sang Phòng 4)
-            Scene active = SceneManager.GetActiveScene();
-            if (active.name == "SampleScene")
-            {
-                EnsurePortalInSampleScene();
-            }
-            EditorSceneManager.SaveOpenScenes();
-
-            // Tự động dựng và mở luôn Map Phòng 4 để người dùng bấm Play chơi ngay lập tức
-            BuildRoom4Scene(false);
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+            TryAutoBuildRoom4();
         };
+    }
+
+    private static void OnPlayModeChanged(PlayModeStateChange state)
+    {
+        if (state == PlayModeStateChange.EnteredEditMode)
+        {
+            EditorApplication.delayCall += TryAutoBuildRoom4;
+        }
+    }
+
+    private static void TryAutoBuildRoom4()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+        if (File.Exists(ScenePath) && File.Exists(DronePrefabPath) && SessionState.GetBool(AutoBuildKey, false)) return;
+        SessionState.SetBool(AutoBuildKey, true);
+
+        Scene active = SceneManager.GetActiveScene();
+        if (active.name == "SampleScene")
+        {
+            EnsurePortalInSampleScene();
+        }
+        EditorSceneManager.SaveOpenScenes();
+
+        // Tự động dựng lại và mở Map Phòng 4 với góc nhìn 2.5D Cutaway không bị tường che
+        BuildRoom4Scene(false);
     }
 
     [MenuItem("Tools/Xay Dung va Mo Phong 4 (Khu An Ninh)")]
@@ -122,10 +140,10 @@ public class SetupRoom4Security
         GameObject propsRoot = new GameObject("Room4_Props_And_Cover");
         BuildCoverProps(propsRoot.transform);
 
-        // 6. Đặt Camera An Ninh (denanninh.glb) quét hành lang
+        // 6. Đặt Camera An Ninh (denanninh.glb) gắn trên tường trái quét chéo hành lang
         GameObject camsRoot = new GameObject("Room4_Security_Cameras");
-        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_1", new Vector3(-0.60f, 0.30f, 0.90f), Quaternion.Euler(26f, 118f, 0f), 0f);
-        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_2", new Vector3(0.60f, 0.30f, 2.00f), Quaternion.Euler(26f, -118f, 0f), 1.6f);
+        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_1", new Vector3(-0.62f, 0.25f, 0.90f), Quaternion.Euler(28f, 112f, 0f), 0f);
+        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_2", new Vector3(-0.62f, 0.25f, 2.05f), Quaternion.Euler(28f, 108f, 0f), 1.6f);
 
         // 7. Hệ thống Lưới Quét Laser dày đặc
         GameObject lasersRoot = new GameObject("Room4_Laser_Grid");
@@ -370,15 +388,16 @@ public class SetupRoom4Security
 
     static void BuildEnvironment(Transform parent)
     {
-        Material floorMat = CreateUrpLitMaterial("SecurityFloorMat", new Color(0.14f, 0.16f, 0.20f), 0.35f, 0.55f);
-        Material wallMat = CreateUrpLitMaterial("SecurityWallMat", new Color(0.22f, 0.25f, 0.30f), 0.45f, 0.40f);
-        Material stripMat = CreateUrpLitMaterial("SecurityNeonStripMat", new Color(0.12f, 0.78f, 1f), 0.1f, 0.9f, new Color(0.12f, 0.78f, 1f) * 1.4f);
+        Material floorMat = CreateUrpLitMaterial("SecurityFloorMat", new Color(0.14f, 0.17f, 0.22f), 0.35f, 0.55f);
+        Material wallMat = CreateUrpLitMaterial("SecurityWallMat", new Color(0.20f, 0.24f, 0.30f), 0.45f, 0.40f);
+        Material pillarMat = CreateUrpLitMaterial("SecurityPillarMat", new Color(0.28f, 0.33f, 0.40f), 0.65f, 0.55f);
+        Material stripMat = CreateUrpLitMaterial("SecurityNeonStripMat", new Color(0.12f, 0.78f, 1f), 0.1f, 0.9f, new Color(0.12f, 0.78f, 1f) * 1.5f);
 
         // Sàn chính: rộng 1.40m (x: -0.70 -> +0.70), dài 3.90m (z: -0.60 -> +3.30), mặt trên đúng y = 0.045f
         GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
         floor.name = "Security_Floor";
         floor.transform.SetParent(parent, false);
-        floor.transform.position = new Vector3(0f, 0.02f, 1.35f);
+        floor.transform.localPosition = new Vector3(0f, 0.02f, 1.35f);
         floor.transform.localScale = new Vector3(1.40f, 0.05f, 3.90f);
         floor.GetComponent<Renderer>().sharedMaterial = floorMat;
 
@@ -386,24 +405,47 @@ public class SetupRoom4Security
         CreateBox(parent, "Floor_NeonLeft", new Vector3(-0.56f, 0.046f, 1.35f), new Vector3(0.022f, 0.004f, 3.60f), stripMat, false);
         CreateBox(parent, "Floor_NeonRight", new Vector3(0.56f, 0.046f, 1.35f), new Vector3(0.022f, 0.004f, 3.60f), stripMat, false);
 
-        // 4 Bức tường bao quanh (chắn tia Laser và giữ giới hạn phòng)
-        CreateBox(parent, "Wall_Left", new Vector3(-0.68f, 0.26f, 1.35f), new Vector3(0.06f, 0.44f, 3.95f), wallMat, true);
-        CreateBox(parent, "Wall_Right", new Vector3(0.68f, 0.26f, 1.35f), new Vector3(0.06f, 0.44f, 3.95f), wallMat, true);
-        CreateBox(parent, "Wall_Back", new Vector3(0f, 0.26f, -0.58f), new Vector3(1.40f, 0.44f, 0.06f), wallMat, true);
-        CreateBox(parent, "Wall_Front", new Vector3(0f, 0.26f, 3.28f), new Vector3(1.40f, 0.44f, 0.06f), wallMat, true);
+        // Kiến trúc Cutaway 2.5D (Little Nightmares Diorama):
+        // - Tường Trái (Wall_Left) và Tường Đích (Wall_Front) cao để tạo chiều sâu không gian.
+        // - Phía Camera nhìn vào (Bên Phải +X và Phía Sau -Z) dùng gờ chắn thấp (Cutaway Curb) để KHÔNG BAO GIỜ che khuất tầm nhìn Camera!
+        CreateBox(parent, "Wall_Left", new Vector3(-0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true);
+        CreateBox(parent, "Wall_Front", new Vector3(0f, 0.24f, 3.28f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true);
 
-        // Đèn trần chiếu sáng phân khu
-        CreateCeilingPointLight(parent, "Light_StartZone", new Vector3(0f, 0.40f, 0.10f), new Color(0.65f, 0.88f, 1f), 1.4f, 1.6f);
-        CreateCeilingPointLight(parent, "Light_MidCorridor", new Vector3(0f, 0.40f, 1.40f), new Color(1f, 0.55f, 0.45f), 1.3f, 1.7f);
-        CreateCeilingPointLight(parent, "Light_TerminalZone", new Vector3(0f, 0.40f, 2.75f), new Color(0.45f, 0.95f, 0.85f), 1.4f, 1.6f);
+        // Các cột gân công nghiệp dọc tường trái
+        for (int i = 0; i < 5; i++)
+        {
+            float zPos = -0.20f + i * 0.80f;
+            CreateBox(parent, "Wall_Left_Rib_" + i, new Vector3(-0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false);
+        }
+
+        // Gờ chắn thấp phía Camera (bên phải +X và phía sau -Z) + Trụ gắn tia Laser bên phải
+        CreateBox(parent, "Curb_Right_Cutaway", new Vector3(0.68f, 0.065f, 1.35f), new Vector3(0.06f, 0.045f, 3.95f), pillarMat, false);
+        CreateBox(parent, "Curb_Back_Cutaway", new Vector3(0f, 0.065f, -0.58f), new Vector3(1.40f, 0.045f, 0.06f), pillarMat, true);
+
+        // Trụ đỡ thấp cho các trạm phóng Laser bên phải (cao 0.13m, không che Camera)
+        CreateBox(parent, "LaserPylon_R1", new Vector3(0.64f, 0.105f, 0.52f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
+        CreateBox(parent, "LaserPylon_R2", new Vector3(0.64f, 0.105f, 1.56f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
+        CreateBox(parent, "LaserPylon_R3", new Vector3(0.64f, 0.105f, 2.48f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
+
+        // Tường vô hình bên phải để chặn tia Laser dừng đúng mép hành lang mà không che khuất Camera
+        GameObject invisibleRightBlocker = new GameObject("Wall_Right_InvisibleLaserBlocker");
+        invisibleRightBlocker.transform.SetParent(parent, false);
+        invisibleRightBlocker.transform.localPosition = new Vector3(0.68f, 0.24f, 1.35f);
+        BoxCollider rightCol = invisibleRightBlocker.AddComponent<BoxCollider>();
+        rightCol.size = new Vector3(0.06f, 0.40f, 3.95f);
+
+        // Đèn trần chiếu sáng phân khu rõ nét
+        CreateCeilingPointLight(parent, "Light_StartZone", new Vector3(0f, 0.45f, -0.05f), new Color(0.75f, 0.92f, 1f), 1.8f, 1.8f);
+        CreateCeilingPointLight(parent, "Light_MidCorridor", new Vector3(0f, 0.45f, 1.35f), new Color(1f, 0.65f, 0.55f), 1.6f, 1.9f);
+        CreateCeilingPointLight(parent, "Light_TerminalZone", new Vector3(0f, 0.45f, 2.75f), new Color(0.55f, 0.98f, 0.88f), 1.8f, 1.8f);
     }
 
-    static GameObject CreateBox(Transform parent, string name, Vector3 pos, Vector3 scale, Material mat, bool keepCollider)
+    static GameObject CreateBox(Transform parent, string name, Vector3 localPos, Vector3 scale, Material mat, bool keepCollider)
     {
         GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
         go.name = name;
         go.transform.SetParent(parent, false);
-        go.transform.position = pos;
+        go.transform.localPosition = localPos;
         go.transform.localScale = scale;
         go.GetComponent<Renderer>().sharedMaterial = mat;
         if (!keepCollider) Object.DestroyImmediate(go.GetComponent<Collider>());
@@ -414,7 +456,7 @@ public class SetupRoom4Security
     {
         GameObject lObj = new GameObject(name);
         lObj.transform.SetParent(parent, false);
-        lObj.transform.position = pos;
+        lObj.transform.localPosition = pos;
         Light l = lObj.AddComponent<Light>();
         l.type = LightType.Point;
         l.color = col;
@@ -422,56 +464,82 @@ public class SetupRoom4Security
         l.range = range;
     }
 
+    /// <summary>
+    /// Chuẩn hóa kích thước mô hình 3D (.glb/.fbx) về đúng chiều cao mục tiêu và đặt chân sát mặt sàn.
+    /// Giúp các kệ sắt/tủ vừa vặn làm chỗ nấp mà không bao giờ phóng đại khổng lồ che màn hình.
+    /// </summary>
+    static Bounds NormalizeModelToHeight(GameObject go, float targetHeight, float groundY)
+    {
+        Renderer[] rends = go.GetComponentsInChildren<Renderer>(true);
+        if (rends.Length == 0)
+            return new Bounds(go.transform.position, Vector3.one * targetHeight);
+
+        Bounds b = rends[0].bounds;
+        for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+        if (b.size.y > 0.0005f)
+        {
+            float scaleFactor = targetHeight / b.size.y;
+            go.transform.localScale *= scaleFactor;
+        }
+
+        // Tính lại Bounds sau khi scale để đặt đáy chạm đúng mặt sàn groundY
+        b = rends[0].bounds;
+        for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+        float deltaY = groundY - b.min.y;
+        go.transform.position += new Vector3(0f, deltaY, 0f);
+
+        b = rends[0].bounds;
+        for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+        return b;
+    }
+
     static void BuildCoverProps(Transform parent)
     {
         PlaceAssetCover(parent, "Cover_Rack_1", "Assets/AssetStorage/itemInRoom/kesat1.glb",
-            new Vector3(-0.34f, 0.045f, 0.72f), Quaternion.Euler(90f, 0f, 0f), new Vector3(0.35f, 0.35f, 0.35f));
+            new Vector3(-0.30f, 0.045f, 0.72f), Quaternion.Euler(90f, 0f, 0f), 0.13f);
 
         PlaceAssetCover(parent, "Cover_Cabinet_1", "Assets/AssetStorage/itemInRoom/tu1.glb",
-            new Vector3(0.36f, 0.045f, 1.12f), Quaternion.Euler(90f, 0f, 90f), new Vector3(0.32f, 0.32f, 0.32f));
+            new Vector3(0.28f, 0.045f, 1.12f), Quaternion.Euler(90f, 0f, 90f), 0.13f);
 
         PlaceAssetCover(parent, "Cover_Rack_2", "Assets/AssetStorage/itemInRoom/kesat2.glb",
-            new Vector3(-0.34f, 0.045f, 1.78f), Quaternion.Euler(90f, 0f, 0f), new Vector3(0.35f, 0.35f, 0.35f));
+            new Vector3(-0.30f, 0.045f, 1.78f), Quaternion.Euler(90f, 0f, 0f), 0.13f);
 
         PlaceAssetCover(parent, "Cover_Cabinet_2", "Assets/AssetStorage/itemInRoom/tu2.glb",
-            new Vector3(0.36f, 0.045f, 2.26f), Quaternion.Euler(90f, 0f, -90f), new Vector3(0.32f, 0.32f, 0.32f));
+            new Vector3(0.28f, 0.045f, 2.26f), Quaternion.Euler(90f, 0f, -90f), 0.13f);
     }
 
-    static void PlaceAssetCover(Transform parent, string name, string assetPath, Vector3 pos, Quaternion rot, Vector3 scale)
+    static void PlaceAssetCover(Transform parent, string name, string assetPath, Vector3 pos, Quaternion rot, float targetHeight)
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
-        GameObject go;
         if (prefab != null)
         {
-            go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             go.name = name;
             go.transform.SetParent(parent, false);
             go.transform.position = pos;
             go.transform.rotation = rot;
-            go.transform.localScale = scale;
+            go.transform.localScale = Vector3.one;
             EnsureMaterialsAreUrp(go);
 
-            // Gắn BoxCollider chuẩn theo Renderer để chặn Laser và Player đi xuyên
-            if (go.GetComponentInChildren<Collider>() == null)
-            {
-                Renderer[] rends = go.GetComponentsInChildren<Renderer>();
-                if (rends.Length > 0)
-                {
-                    Bounds b = rends[0].bounds;
-                    for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            Bounds b = NormalizeModelToHeight(go, targetHeight, pos.y);
 
-                    GameObject colObj = new GameObject("LaserBlockCollider");
-                    colObj.transform.SetParent(parent, false);
-                    colObj.transform.position = b.center;
-                    BoxCollider bc = colObj.AddComponent<BoxCollider>();
-                    bc.size = b.size;
-                }
-            }
+            // Gắn BoxCollider gọn gàng theo kích thước đã chuẩn hóa để chặn tia Laser
+            GameObject colObj = new GameObject(name + "_Collider");
+            colObj.transform.SetParent(parent, false);
+            colObj.transform.position = b.center;
+            BoxCollider bc = colObj.AddComponent<BoxCollider>();
+            bc.size = new Vector3(
+                Mathf.Clamp(b.size.x, 0.12f, 0.24f),
+                Mathf.Clamp(b.size.y, 0.12f, 0.16f),
+                Mathf.Clamp(b.size.z, 0.08f, 0.20f)
+            );
         }
         else
         {
             Material fallbackMat = CreateUrpLitMaterial(name + "_Mat", new Color(0.30f, 0.35f, 0.42f), 0.6f, 0.4f);
-            go = CreateBox(parent, name, pos + new Vector3(0f, 0.11f, 0f), new Vector3(0.24f, 0.22f, 0.16f), fallbackMat, true);
+            CreateBox(parent, name, pos + new Vector3(0f, 0.065f, 0f), new Vector3(0.18f, 0.13f, 0.10f), fallbackMat, true);
         }
     }
 
@@ -488,9 +556,22 @@ public class SetupRoom4Security
             GameObject model = (GameObject)PrefabUtility.InstantiatePrefab(camAsset);
             model.name = "CameraModel";
             model.transform.SetParent(camRoot.transform, false);
+            model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            model.transform.localScale = new Vector3(0.08f, 0.08f, 0.08f);
+            model.transform.localScale = Vector3.one;
             EnsureMaterialsAreUrp(model);
+
+            Renderer[] rends = model.GetComponentsInChildren<Renderer>(true);
+            if (rends.Length > 0)
+            {
+                Bounds b = rends[0].bounds;
+                for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+                float maxDim = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
+                if (maxDim > 0.001f)
+                {
+                    model.transform.localScale *= (0.07f / maxDim);
+                }
+            }
         }
 
         // Đèn mắt camera phát sáng + Spotlight quét xuống sàn
@@ -498,13 +579,15 @@ public class SetupRoom4Security
         GameObject lens = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         lens.name = "CameraLens";
         lens.transform.SetParent(camRoot.transform, false);
-        lens.transform.localScale = Vector3.one * 0.03f;
+        lens.transform.localPosition = Vector3.zero;
+        lens.transform.localScale = Vector3.one * 0.026f;
         Object.DestroyImmediate(lens.GetComponent<Collider>());
         Renderer lensRend = lens.GetComponent<Renderer>();
         lensRend.sharedMaterial = lensMat;
 
         GameObject lightObj = new GameObject("CameraSpotlight");
         lightObj.transform.SetParent(camRoot.transform, false);
+        lightObj.transform.localPosition = Vector3.zero;
         Light spot = lightObj.AddComponent<Light>();
         spot.type = LightType.Spot;
         spot.range = 1.35f;
@@ -558,19 +641,21 @@ public class SetupRoom4Security
             GameObject desk = (GameObject)PrefabUtility.InstantiatePrefab(deskPrefab);
             desk.name = "DeskModel";
             desk.transform.SetParent(termRoot.transform, false);
+            desk.transform.localPosition = Vector3.zero;
             desk.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            desk.transform.localScale = new Vector3(0.28f, 0.28f, 0.28f);
+            desk.transform.localScale = Vector3.one;
             EnsureMaterialsAreUrp(desk);
+            NormalizeModelToHeight(desk, 0.105f, pos.y);
         }
         else
         {
             Material deskMat = CreateUrpLitMaterial("TerminalDeskMat", new Color(0.22f, 0.26f, 0.32f));
-            CreateBox(termRoot.transform, "DeskBox", new Vector3(0f, 0.06f, 0f), new Vector3(0.18f, 0.12f, 0.10f), deskMat, false);
+            CreateBox(termRoot.transform, "DeskBox", new Vector3(0f, 0.055f, 0f), new Vector3(0.18f, 0.11f, 0.10f), deskMat, false);
         }
 
         // Màn hình phát sáng trên bàn điều khiển
         Material screenMat = CreateUrpLitMaterial("TerminalScreenMat", new Color(1f, 0.25f, 0.2f), 0.1f, 0.9f, new Color(1f, 0.25f, 0.2f) * 2.2f);
-        GameObject screen = CreateBox(termRoot.transform, "HoloScreen", new Vector3(0f, 0.14f, 0f), new Vector3(0.12f, 0.075f, 0.012f), screenMat, false);
+        GameObject screen = CreateBox(termRoot.transform, "HoloScreen", new Vector3(0f, 0.135f, 0f), new Vector3(0.12f, 0.07f, 0.012f), screenMat, false);
 
         GameObject lightObj = new GameObject("TerminalLight");
         lightObj.transform.SetParent(termRoot.transform, false);
@@ -657,19 +742,10 @@ public class SetupRoom4Security
 
         playerObj.tag = "Player";
         playerObj.transform.position = pos;
+        playerObj.transform.localScale = Vector3.one;
 
-        // Đảm bảo kích thước nhân vật khớp chuẩn tỷ lệ thu nhỏ (~0.075m) bất kể FBX import gốc
-        Renderer[] playerRends = playerObj.GetComponentsInChildren<Renderer>(true);
-        if (playerRends.Length > 0)
-        {
-            Bounds pb = playerRends[0].bounds;
-            for (int i = 1; i < playerRends.Length; i++) pb.Encapsulate(playerRends[i].bounds);
-            if (pb.size.y > 0.18f || pb.size.y < 0.03f)
-            {
-                float ratio = 0.075f / Mathf.Max(0.001f, pb.size.y);
-                playerObj.transform.localScale *= ratio;
-            }
-        }
+        // Chuẩn hóa chiều cao nhân vật (~0.078m) và đặt bàn chân chạm chuẩn mặt sàn y = 0.046f
+        NormalizeModelToHeight(playerObj, 0.078f, 0.046f);
 
         Animator anim = playerObj.GetComponentInChildren<Animator>(true);
         if (anim != null)
@@ -687,7 +763,7 @@ public class SetupRoom4Security
         pc.minZ = -0.48f;
         pc.maxZ = 3.16f;
         pc.lockToGroundY = true;
-        pc.groundY = pos.y;
+        pc.groundY = playerObj.transform.position.y;
         pc.animator = anim;
 
         playerObj.AddComponent<PlayerHealth>();
@@ -701,19 +777,26 @@ public class SetupRoom4Security
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
         Camera cam = camObj.AddComponent<Camera>();
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 1f);
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 50f;
-        cam.fieldOfView = 55f;
+        cam.fieldOfView = 50f;
         camObj.AddComponent<AudioListener>();
 
-        // Đặt góc nhìn 2.5D bao quát hành lang phòng An Ninh
+        // Góc nhìn 2.5D Diorama Cutaway cao thoáng, nhìn rõ nhân vật và toàn bộ hành lang Laser phía trước
+        Vector3 camOffset = new Vector3(0.26f, 0.32f, -0.38f);
+        Vector3 camEuler = new Vector3(32f, -24f, 0f);
         Vector3 startTargetPos = target != null ? target.position : new Vector3(0f, 0.048f, -0.32f);
-        camObj.transform.position = startTargetPos + new Vector3(0.45f, 0.42f, -0.58f);
-        camObj.transform.rotation = Quaternion.Euler(30f, -32f, 0f);
+
+        camObj.transform.position = startTargetPos + camOffset;
+        camObj.transform.rotation = Quaternion.Euler(camEuler);
 
         CameraFollow25D follow = camObj.AddComponent<CameraFollow25D>();
         follow.target = target;
-        follow.lockCurrentSceneView = true;
+        follow.offset = camOffset;
+        follow.fixedRotation = camEuler;
+        follow.lockCurrentSceneView = false;
         follow.smoothSpeed = 0.06f;
     }
 
