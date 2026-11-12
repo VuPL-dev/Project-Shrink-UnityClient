@@ -22,7 +22,7 @@ public class SetupRoom4Security
     private const string ScenePath = "Assets/Scenes/Room4_Security.unity";
     private const string DronePrefabPath = "Assets/Prefabs/SecurityDrone.prefab";
 
-    private const string AutoBuildKey = "Room4_AutoBuilt_v4";
+    private const string AutoBuildKey = "Room4_AutoBuilt_v5";
 
     [InitializeOnLoadMethod]
     private static void AutoCreateRoom4Once()
@@ -111,20 +111,27 @@ public class SetupRoom4Security
         // 1. Tạo hoặc cập nhật Prefab SecurityDrone
         GameObject dronePrefab = CreateOrUpdateSecurityDronePrefab();
 
-        // 2. Tạo Scene mới cho Phòng 4
-        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        // 2. Tạo Scene mới cho Phòng 4 với đầy đủ môi trường Skybox & Reflection chuẩn như SampleScene
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+        foreach (GameObject defaultGo in scene.GetRootGameObjects())
+        {
+            if (defaultGo.name == "Main Camera" || defaultGo.name == "Directional Light")
+            {
+                Object.DestroyImmediate(defaultGo);
+            }
+        }
 
-        // Ánh sáng tổng thể (tông An ninh công nghệ lạnh, dễ quan sát)
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.18f, 0.22f, 0.28f, 1f);
-
-        GameObject dirLightObj = new GameObject("Directional Light");
-        Light dirLight = dirLightObj.AddComponent<Light>();
-        dirLight.type = LightType.Directional;
-        dirLight.color = new Color(0.75f, 0.86f, 1f);
-        dirLight.intensity = 0.65f;
-        dirLight.shadows = LightShadows.Soft;
-        dirLightObj.transform.rotation = Quaternion.Euler(52f, -32f, 0f);
+        // Đồng bộ 100% thông số RenderSettings (Skybox, Ambient & Specular Reflection) giống hệt SampleScene
+        Material defaultSkybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
+        if (defaultSkybox != null) RenderSettings.skybox = defaultSkybox;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
+        RenderSettings.ambientSkyColor = new Color(0.212f, 0.227f, 0.259f, 1f);
+        RenderSettings.ambientEquatorColor = new Color(0.114f, 0.125f, 0.133f, 1f);
+        RenderSettings.ambientGroundColor = new Color(0.047f, 0.043f, 0.035f, 1f);
+        RenderSettings.ambientIntensity = 1.0f;
+        RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Skybox;
+        RenderSettings.reflectionIntensity = 1.0f;
+        RenderSettings.reflectionBounces = 1;
 
         // 3. Hệ thống quản lý báo động toàn phòng
         GameObject alarmMgrObj = new GameObject("Security_Alarm_Manager");
@@ -411,23 +418,31 @@ public class SetupRoom4Security
         CreateBox(parent, "Floor_NeonRight", new Vector3(0.56f, 0.046f, 1.35f), new Vector3(0.022f, 0.004f, 3.60f), stripMat, false);
 
         // Đầy đủ 4 bức tường bao quanh (Tường Trái, Tường Phải, Tường Đích, Tường Sau)
-        CreateBox(parent, "Wall_Left", new Vector3(-0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true);
-        CreateBox(parent, "Wall_Right", new Vector3(0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true);
-        CreateBox(parent, "Wall_Back", new Vector3(0f, 0.24f, -0.66f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true);
-        CreateBox(parent, "Wall_Front", new Vector3(0f, 0.24f, 3.28f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true);
+        // Tắt đổ bóng của các bức tường hành lang để ánh sáng Directional Light chiếu trực tiếp lên nhân vật giống hệt SampleScene
+        DisableShadowCasting(CreateBox(parent, "Wall_Left", new Vector3(-0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true));
+        DisableShadowCasting(CreateBox(parent, "Wall_Right", new Vector3(0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true));
+        DisableShadowCasting(CreateBox(parent, "Wall_Back", new Vector3(0f, 0.24f, -0.66f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true));
+        DisableShadowCasting(CreateBox(parent, "Wall_Front", new Vector3(0f, 0.24f, 3.28f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true));
 
         // Các cột gân công nghiệp dọc cả Tường Trái và Tường Phải
         for (int i = 0; i < 5; i++)
         {
             float zPos = -0.20f + i * 0.80f;
-            CreateBox(parent, "Wall_Left_Rib_" + i, new Vector3(-0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false);
-            CreateBox(parent, "Wall_Right_Rib_" + i, new Vector3(0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false);
+            DisableShadowCasting(CreateBox(parent, "Wall_Left_Rib_" + i, new Vector3(-0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false));
+            DisableShadowCasting(CreateBox(parent, "Wall_Right_Rib_" + i, new Vector3(0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false));
         }
 
-        // Đèn trần chiếu sáng phân khu rõ nét
-        CreateCeilingPointLight(parent, "Light_StartZone", new Vector3(0f, 0.45f, -0.05f), new Color(0.75f, 0.92f, 1f), 1.8f, 1.8f);
-        CreateCeilingPointLight(parent, "Light_MidCorridor", new Vector3(0f, 0.45f, 1.35f), new Color(1f, 0.65f, 0.55f), 1.6f, 1.9f);
-        CreateCeilingPointLight(parent, "Light_TerminalZone", new Vector3(0f, 0.45f, 2.75f), new Color(0.55f, 0.98f, 0.88f), 1.8f, 1.8f);
+        // Đèn trần ánh sáng trắng tự nhiên (5000K, cường độ dịu) để giữ nguyên màu da và quần áo nhân vật giống SampleScene
+        CreateCeilingPointLight(parent, "Light_StartZone", new Vector3(0f, 0.45f, -0.05f), Color.white, 0.35f, 1.8f);
+        CreateCeilingPointLight(parent, "Light_MidCorridor", new Vector3(0f, 0.45f, 1.35f), Color.white, 0.35f, 1.9f);
+        CreateCeilingPointLight(parent, "Light_TerminalZone", new Vector3(0f, 0.45f, 2.75f), Color.white, 0.35f, 1.8f);
+    }
+
+    static void DisableShadowCasting(GameObject go)
+    {
+        if (go == null) return;
+        Renderer r = go.GetComponent<Renderer>();
+        if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
     static GameObject CreateBox(Transform parent, string name, Vector3 localPos, Vector3 scale, Material mat, bool keepCollider)
@@ -714,12 +729,14 @@ public class SetupRoom4Security
     }
 
     /// <summary>
-    /// Sao chép nguyên bản 100% nhân vật player_v2 từ SampleScene.unity sang Phòng 4
-    /// (giữ nguyên toàn bộ tỷ lệ Mesh, Material, Animator, Vũ khí & Script cấu hình).
+    /// Sao chép nguyên bản 100% nhân vật player_v2, Directional Light và Global Volume từ SampleScene.unity sang Phòng 4
+    /// (giữ nguyên toàn bộ tỷ lệ Mesh, Material, Animator, Vũ khí & Ánh sáng chuẩn của SampleScene).
     /// </summary>
     static GameObject CreatePlayerFromSampleScene(Vector3 pos, Scene targetScene)
     {
         GameObject playerObj = null;
+        GameObject dirLightObj = null;
+        bool clonedPlayerFromSample = false;
 
         if (File.Exists("Assets/Scenes/SampleScene.unity"))
         {
@@ -729,18 +746,49 @@ public class SetupRoom4Security
                 GameObject[] roots = sampleScene.GetRootGameObjects();
                 for (int i = 0; i < roots.Length; i++)
                 {
-                    if (roots[i] != null && (roots[i].name == "player_v2" || roots[i].CompareTag("Player")))
+                    if (roots[i] == null) continue;
+
+                    if (playerObj == null && (roots[i].name == "player_v2" || roots[i].CompareTag("Player")))
                     {
                         playerObj = Object.Instantiate(roots[i]);
                         playerObj.name = "player_v2";
                         SceneManager.MoveGameObjectToScene(playerObj, targetScene);
-                        break;
+                        clonedPlayerFromSample = true;
+                    }
+                    else if (dirLightObj == null && roots[i].name == "Directional Light")
+                    {
+                        dirLightObj = Object.Instantiate(roots[i]);
+                        dirLightObj.name = "Directional Light";
+                        SceneManager.MoveGameObjectToScene(dirLightObj, targetScene);
+                    }
+                    else if (roots[i].name == "Global Volume")
+                    {
+                        GameObject volObj = Object.Instantiate(roots[i]);
+                        volObj.name = "Global Volume";
+                        SceneManager.MoveGameObjectToScene(volObj, targetScene);
                     }
                 }
                 EditorSceneManager.CloseScene(sampleScene, true);
                 SceneManager.SetActiveScene(targetScene);
             }
         }
+
+        // Cấu hình Directional Light giống hệt SampleScene (5000K, Intensity 0.3, chiếu thuận hướng góc nhìn Camera lên lưng & vai nhân vật)
+        if (dirLightObj == null)
+        {
+            dirLightObj = new GameObject("Directional Light");
+            Light dl = dirLightObj.AddComponent<Light>();
+            dl.type = LightType.Directional;
+            dl.color = Color.white;
+            dl.useColorTemperature = true;
+            dl.colorTemperature = 5000f;
+            dl.intensity = 0.3f;
+            dl.shadows = LightShadows.Soft;
+        }
+        dirLightObj.transform.rotation = Quaternion.Euler(22f, -9f, 0f);
+        Light activeDirLight = dirLightObj.GetComponent<Light>();
+        if (activeDirLight != null) RenderSettings.sun = activeDirLight;
+        DynamicGI.UpdateEnvironment();
 
         if (playerObj == null)
         {
@@ -757,9 +805,13 @@ public class SetupRoom4Security
                 playerObj.name = "player_v2";
                 playerObj.transform.localScale = Vector3.one * 0.04f;
             }
+            EnsureMaterialsAreUrp(playerObj);
+        }
+        else if (!clonedPlayerFromSample)
+        {
+            EnsureMaterialsAreUrp(playerObj);
         }
 
-        EnsureMaterialsAreUrp(playerObj);
         playerObj.tag = "Player";
         playerObj.transform.position = pos;
         playerObj.transform.rotation = Quaternion.identity;
@@ -799,8 +851,9 @@ public class SetupRoom4Security
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
         Camera cam = camObj.AddComponent<Camera>();
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 1f);
+        cam.clearFlags = CameraClearFlags.Skybox;
+        cam.backgroundColor = new Color(0.19215687f, 0.3019608f, 0.4745098f, 0f);
+        cam.allowHDR = true;
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 50f;
         cam.fieldOfView = 58f;
