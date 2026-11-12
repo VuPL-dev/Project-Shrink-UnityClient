@@ -22,7 +22,7 @@ public class SetupRoom4Security
     private const string ScenePath = "Assets/Scenes/Room4_Security.unity";
     private const string DronePrefabPath = "Assets/Prefabs/SecurityDrone.prefab";
 
-    private const string AutoBuildKey = "Room4_AutoBuilt_v3";
+    private const string AutoBuildKey = "Room4_AutoBuilt_v4";
 
     [InitializeOnLoadMethod]
     private static void AutoCreateRoom4Once()
@@ -140,10 +140,10 @@ public class SetupRoom4Security
         GameObject propsRoot = new GameObject("Room4_Props_And_Cover");
         BuildCoverProps(propsRoot.transform);
 
-        // 6. Đặt Camera An Ninh (denanninh.glb) gắn trên tường trái quét chéo hành lang
+        // 6. Đặt 2 Camera An Ninh (denanninh.glb) gắn trên cả Tường Trái và Tường Phải
         GameObject camsRoot = new GameObject("Room4_Security_Cameras");
-        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_1", new Vector3(-0.62f, 0.25f, 0.90f), Quaternion.Euler(28f, 112f, 0f), 0f);
-        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_2", new Vector3(-0.62f, 0.25f, 2.05f), Quaternion.Euler(28f, 108f, 0f), 1.6f);
+        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_Left_1", new Vector3(-0.60f, 0.28f, 0.90f), Quaternion.Euler(28f, 118f, 0f), 0f);
+        CreateSecurityCamera(camsRoot.transform, "SecurityCamera_Right_2", new Vector3(0.60f, 0.28f, 2.00f), Quaternion.Euler(28f, -118f, 0f), 1.6f);
 
         // 7. Hệ thống Lưới Quét Laser dày đặc
         GameObject lasersRoot = new GameObject("Room4_Laser_Grid");
@@ -186,9 +186,14 @@ public class SetupRoom4Security
             s2.transform.position = new Vector3(0.46f, 0.075f, 2.15f);
         }
 
-        // 11. Đặt Nhân Vật (player_v2) & Camera 2.5D Little Nightmares
-        GameObject playerObj = CreatePlayerInScene(new Vector3(0.0f, 0.048f, -0.32f));
-        CreateFollowCamera(playerObj != null ? playerObj.transform : null);
+        // 11. Lấy nguyên bản nhân vật player_v2 từ SampleScene & đặt Camera nằm gọn trong lòng 2 bức tường
+        GameObject playerObj = CreatePlayerFromSampleScene(new Vector3(0.0f, 0.08f, -0.28f), scene);
+        GameObject camObj = CreateFollowCamera(playerObj != null ? playerObj.transform : null);
+        if (playerObj != null && camObj != null)
+        {
+            PlayerController pc = playerObj.GetComponent<PlayerController>();
+            if (pc != null) pc.cameraTransform = camObj.transform;
+        }
 
         // Lưu Scene và đăng ký vào Build Settings
         EditorSceneManager.SaveScene(scene, ScenePath);
@@ -405,34 +410,19 @@ public class SetupRoom4Security
         CreateBox(parent, "Floor_NeonLeft", new Vector3(-0.56f, 0.046f, 1.35f), new Vector3(0.022f, 0.004f, 3.60f), stripMat, false);
         CreateBox(parent, "Floor_NeonRight", new Vector3(0.56f, 0.046f, 1.35f), new Vector3(0.022f, 0.004f, 3.60f), stripMat, false);
 
-        // Kiến trúc Cutaway 2.5D (Little Nightmares Diorama):
-        // - Tường Trái (Wall_Left) và Tường Đích (Wall_Front) cao để tạo chiều sâu không gian.
-        // - Phía Camera nhìn vào (Bên Phải +X và Phía Sau -Z) dùng gờ chắn thấp (Cutaway Curb) để KHÔNG BAO GIỜ che khuất tầm nhìn Camera!
+        // Đầy đủ 4 bức tường bao quanh (Tường Trái, Tường Phải, Tường Đích, Tường Sau)
         CreateBox(parent, "Wall_Left", new Vector3(-0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true);
+        CreateBox(parent, "Wall_Right", new Vector3(0.68f, 0.24f, 1.35f), new Vector3(0.06f, 0.40f, 3.95f), wallMat, true);
+        CreateBox(parent, "Wall_Back", new Vector3(0f, 0.24f, -0.66f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true);
         CreateBox(parent, "Wall_Front", new Vector3(0f, 0.24f, 3.28f), new Vector3(1.40f, 0.40f, 0.06f), wallMat, true);
 
-        // Các cột gân công nghiệp dọc tường trái
+        // Các cột gân công nghiệp dọc cả Tường Trái và Tường Phải
         for (int i = 0; i < 5; i++)
         {
             float zPos = -0.20f + i * 0.80f;
             CreateBox(parent, "Wall_Left_Rib_" + i, new Vector3(-0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false);
+            CreateBox(parent, "Wall_Right_Rib_" + i, new Vector3(0.64f, 0.24f, zPos), new Vector3(0.03f, 0.40f, 0.05f), pillarMat, false);
         }
-
-        // Gờ chắn thấp phía Camera (bên phải +X và phía sau -Z) + Trụ gắn tia Laser bên phải
-        CreateBox(parent, "Curb_Right_Cutaway", new Vector3(0.68f, 0.065f, 1.35f), new Vector3(0.06f, 0.045f, 3.95f), pillarMat, false);
-        CreateBox(parent, "Curb_Back_Cutaway", new Vector3(0f, 0.065f, -0.58f), new Vector3(1.40f, 0.045f, 0.06f), pillarMat, true);
-
-        // Trụ đỡ thấp cho các trạm phóng Laser bên phải (cao 0.13m, không che Camera)
-        CreateBox(parent, "LaserPylon_R1", new Vector3(0.64f, 0.105f, 0.52f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
-        CreateBox(parent, "LaserPylon_R2", new Vector3(0.64f, 0.105f, 1.56f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
-        CreateBox(parent, "LaserPylon_R3", new Vector3(0.64f, 0.105f, 2.48f), new Vector3(0.04f, 0.12f, 0.04f), pillarMat, false);
-
-        // Tường vô hình bên phải để chặn tia Laser dừng đúng mép hành lang mà không che khuất Camera
-        GameObject invisibleRightBlocker = new GameObject("Wall_Right_InvisibleLaserBlocker");
-        invisibleRightBlocker.transform.SetParent(parent, false);
-        invisibleRightBlocker.transform.localPosition = new Vector3(0.68f, 0.24f, 1.35f);
-        BoxCollider rightCol = invisibleRightBlocker.AddComponent<BoxCollider>();
-        rightCol.size = new Vector3(0.06f, 0.40f, 3.95f);
 
         // Đèn trần chiếu sáng phân khu rõ nét
         CreateCeilingPointLight(parent, "Light_StartZone", new Vector3(0f, 0.45f, -0.05f), new Color(0.75f, 0.92f, 1f), 1.8f, 1.8f);
@@ -723,29 +713,56 @@ public class SetupRoom4Security
         }
     }
 
-    static GameObject CreatePlayerInScene(Vector3 pos)
+    /// <summary>
+    /// Sao chép nguyên bản 100% nhân vật player_v2 từ SampleScene.unity sang Phòng 4
+    /// (giữ nguyên toàn bộ tỷ lệ Mesh, Material, Animator, Vũ khí & Script cấu hình).
+    /// </summary>
+    static GameObject CreatePlayerFromSampleScene(Vector3 pos, Scene targetScene)
     {
-        GameObject playerModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/character_V2/tripo_convert_b0f0bc7c-8966-417d-8980-40dfb7dbabb6@Idle.fbx");
-        GameObject playerObj;
-        if (playerModel != null)
+        GameObject playerObj = null;
+
+        if (File.Exists("Assets/Scenes/SampleScene.unity"))
         {
-            playerObj = (GameObject)PrefabUtility.InstantiatePrefab(playerModel);
-            playerObj.name = "player_v2";
-            EnsureMaterialsAreUrp(playerObj);
-        }
-        else
-        {
-            playerObj = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            playerObj.name = "player_v2";
-            playerObj.transform.localScale = Vector3.one * 0.04f;
+            Scene sampleScene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+            if (sampleScene.IsValid())
+            {
+                GameObject[] roots = sampleScene.GetRootGameObjects();
+                for (int i = 0; i < roots.Length; i++)
+                {
+                    if (roots[i] != null && (roots[i].name == "player_v2" || roots[i].CompareTag("Player")))
+                    {
+                        playerObj = Object.Instantiate(roots[i]);
+                        playerObj.name = "player_v2";
+                        SceneManager.MoveGameObjectToScene(playerObj, targetScene);
+                        break;
+                    }
+                }
+                EditorSceneManager.CloseScene(sampleScene, true);
+                SceneManager.SetActiveScene(targetScene);
+            }
         }
 
+        if (playerObj == null)
+        {
+            GameObject playerModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/character_V2/tripo_convert_b0f0bc7c-8966-417d-8980-40dfb7dbabb6@Idle.fbx");
+            if (playerModel != null)
+            {
+                playerObj = (GameObject)PrefabUtility.InstantiatePrefab(playerModel);
+                playerObj.name = "player_v2";
+                playerObj.transform.localScale = new Vector3(0.03841332f, 0.037831157f, 0.04288886f);
+            }
+            else
+            {
+                playerObj = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                playerObj.name = "player_v2";
+                playerObj.transform.localScale = Vector3.one * 0.04f;
+            }
+        }
+
+        EnsureMaterialsAreUrp(playerObj);
         playerObj.tag = "Player";
         playerObj.transform.position = pos;
-        playerObj.transform.localScale = Vector3.one;
-
-        // Chuẩn hóa chiều cao nhân vật (~0.078m) và đặt bàn chân chạm chuẩn mặt sàn y = 0.046f
-        NormalizeModelToHeight(playerObj, 0.078f, 0.046f);
+        playerObj.transform.rotation = Quaternion.identity;
 
         Animator anim = playerObj.GetComponentInChildren<Animator>(true);
         if (anim != null)
@@ -755,24 +772,29 @@ public class SetupRoom4Security
             anim.applyRootMotion = false;
         }
 
-        PlayerController pc = playerObj.AddComponent<PlayerController>();
+        PlayerController pc = playerObj.GetComponent<PlayerController>();
+        if (pc == null) pc = playerObj.AddComponent<PlayerController>();
         pc.limitToRoom = true;
         pc.useCustomRoomBounds = true;
-        pc.minX = -0.58f;
-        pc.maxX = 0.58f;
-        pc.minZ = -0.48f;
-        pc.maxZ = 3.16f;
+        pc.minX = -0.54f;
+        pc.maxX = 0.54f;
+        pc.minZ = -0.38f;
+        pc.maxZ = 3.12f;
         pc.lockToGroundY = true;
-        pc.groundY = playerObj.transform.position.y;
+        pc.groundY = pos.y;
         pc.animator = anim;
 
-        playerObj.AddComponent<PlayerHealth>();
-        playerObj.AddComponent<InventoryManager>();
+        PlayerHealth ph = playerObj.GetComponent<PlayerHealth>();
+        if (ph == null) ph = playerObj.AddComponent<PlayerHealth>();
+        ph.healthFillBar = null;
+
+        if (playerObj.GetComponent<InventoryManager>() == null)
+            playerObj.AddComponent<InventoryManager>();
 
         return playerObj;
     }
 
-    static void CreateFollowCamera(Transform target)
+    static GameObject CreateFollowCamera(Transform target)
     {
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
@@ -781,13 +803,14 @@ public class SetupRoom4Security
         cam.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 1f);
         cam.nearClipPlane = 0.01f;
         cam.farClipPlane = 50f;
-        cam.fieldOfView = 50f;
+        cam.fieldOfView = 58f;
         camObj.AddComponent<AudioListener>();
 
-        // Góc nhìn 2.5D Diorama Cutaway cao thoáng, nhìn rõ nhân vật và toàn bộ hành lang Laser phía trước
-        Vector3 camOffset = new Vector3(0.26f, 0.32f, -0.38f);
-        Vector3 camEuler = new Vector3(32f, -24f, 0f);
-        Vector3 startTargetPos = target != null ? target.position : new Vector3(0f, 0.048f, -0.32f);
+        // Đặt Camera nằm gọn BÊN TRONG lòng hành lang (giữa Wall_Left và Wall_Right),
+        // nhìn thấy cả nhân vật lẫn Tường Phải & Tường Trái mà không bao giờ bị tường chắn
+        Vector3 camOffset = new Vector3(0.08f, 0.14f, -0.24f);
+        Vector3 camEuler = new Vector3(22f, -9f, 0f);
+        Vector3 startTargetPos = target != null ? target.position : new Vector3(0f, 0.08f, -0.28f);
 
         camObj.transform.position = startTargetPos + camOffset;
         camObj.transform.rotation = Quaternion.Euler(camEuler);
@@ -798,6 +821,13 @@ public class SetupRoom4Security
         follow.fixedRotation = camEuler;
         follow.lockCurrentSceneView = false;
         follow.smoothSpeed = 0.06f;
+        follow.clampWithinRoom = true;
+        follow.minCamX = -0.52f;
+        follow.maxCamX = 0.52f;
+        follow.minCamZ = -0.56f;
+        follow.maxCamZ = 3.00f;
+
+        return camObj;
     }
 
     static void EnsureSceneInBuildSettings(string scenePath)
