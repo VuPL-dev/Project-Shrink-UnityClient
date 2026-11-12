@@ -28,33 +28,59 @@ public class SetupRoom4Security
         EditorApplication.delayCall += () =>
         {
             if (Application.isPlaying) return;
-            if (File.Exists(ScenePath) && File.Exists(DronePrefabPath)) return;
-            if (SessionState.GetBool("Room4_AutoBuilt_v1", false)) return;
-            SessionState.SetBool("Room4_AutoBuilt_v1", true);
+            if (File.Exists(ScenePath) && File.Exists(DronePrefabPath) && SessionState.GetBool("Room4_AutoBuilt_v2", false)) return;
+            SessionState.SetBool("Room4_AutoBuilt_v2", true);
 
+            // Lưu Scene hiện tại (nếu là SampleScene thì tự động đặt thêm Cửa Sang Phòng 4)
             Scene active = SceneManager.GetActiveScene();
-            if (active.isDirty)
+            if (active.name == "SampleScene")
             {
-                Debug.Log("ℹ️ [SetupRoom4Security] Scene hiện tại đang có thay đổi chưa lưu. Vào Menu [Tools -> Xay Dung Phong 4 - Khu An Ninh] để tạo Phòng 4.");
-                return;
+                EnsurePortalInSampleScene();
             }
+            EditorSceneManager.SaveOpenScenes();
 
-            string prevScenePath = active.path;
+            // Tự động dựng và mở luôn Map Phòng 4 để người dùng bấm Play chơi ngay lập tức
             BuildRoom4Scene(false);
-
-            // Mở lại Scene cũ để không làm gián đoạn công việc đang mở của user
-            if (!string.IsNullOrEmpty(prevScenePath) && prevScenePath != ScenePath && File.Exists(prevScenePath))
-            {
-                EditorSceneManager.OpenScene(prevScenePath, OpenSceneMode.Single);
-            }
         };
     }
 
     [MenuItem("Tools/Xay Dung va Mo Phong 4 (Khu An Ninh)")]
     public static void MenuBuildAndOpenRoom4()
     {
-        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+        EditorSceneManager.SaveOpenScenes();
         BuildRoom4Scene(true);
+    }
+
+    [MenuItem("Tools/Quay Ve Phong 1 (SampleScene)")]
+    public static void MenuOpenSampleScene()
+    {
+        EditorSceneManager.SaveOpenScenes();
+        if (File.Exists("Assets/Scenes/SampleScene.unity"))
+        {
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            EnsurePortalInSampleScene();
+            EditorSceneManager.SaveOpenScenes();
+        }
+    }
+
+    private static void EnsurePortalInSampleScene()
+    {
+        if (GameObject.Find("Portal_To_Room4") != null) return;
+
+        GameObject doorRoot = new GameObject("Portal_To_Room4");
+        doorRoot.transform.position = new Vector3(1.88f, 0.048f, 1.72f);
+
+        Material statusMat = CreateUrpLitMaterial("SampleToRoom4Mat", new Color(0.2f, 1f, 0.45f), 0.1f, 0.9f, new Color(0.2f, 1f, 0.45f) * 2.0f);
+        GameObject panel = CreateBox(doorRoot.transform, "PortalGlow", new Vector3(0f, 0.08f, 0f), new Vector3(0.12f, 0.16f, 0.02f), statusMat, false);
+
+        RoomPortal portal = doorRoot.AddComponent<RoomPortal>();
+        portal.targetSceneName = "Room4_Security";
+        portal.portalLabel = "Phòng 4: Khu An Ninh & Camera";
+        portal.isUnlocked = true;
+        portal.interactRadius = 0.24f;
+        portal.doorLightRenderer = panel.GetComponent<Renderer>();
+
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
     }
 
     public static void BuildRoom4Scene(bool showDialog)
@@ -152,7 +178,13 @@ public class SetupRoom4Security
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        Debug.Log("✅ [SetupRoom4Security] Đã xây dựng xong hoàn toàn Scene Phòng 4: " + ScenePath);
+        if (SceneView.lastActiveSceneView != null)
+        {
+            SceneView.lastActiveSceneView.LookAt(new Vector3(0f, 0.15f, 1.25f), Quaternion.Euler(32f, -28f, 0f), 1.85f);
+            SceneView.lastActiveSceneView.Repaint();
+        }
+
+        Debug.Log("✅ [SetupRoom4Security] Đã xây dựng và mở sẵn Map Phòng 4 tại: " + ScenePath);
 
         if (showDialog)
         {

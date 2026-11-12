@@ -15,6 +15,7 @@ public class SetupAntEnemy
         EditorApplication.delayCall += () =>
         {
             if (Application.isPlaying) return;
+            if (EditorSceneManager.GetActiveScene().name == "Room4_Security") return;
 
             GameObject ant = GameObject.Find("Enemy_Ant");
             if (ant != null)
@@ -30,6 +31,9 @@ public class SetupAntEnemy
                     ai.viewRadius = 0.70f;
                     ai.viewAngle = 65f;
                     ai.hearingRadius = 1.1f;
+        ai.useTerritoryPatrol = true;
+        ai.territoryCenter = new Vector3(1.65f, 0.046889f, 1.35f);
+        ai.territoryRadius = 0.40f;
                     EditorUtility.SetDirty(ant);
                 }
             }
@@ -66,8 +70,8 @@ public class SetupAntEnemy
         antInstance.name = "Enemy_Ant";
 
         // Tọa độ đứng giữa phòng, đối diện với player_v2
-        antInstance.transform.position = new Vector3(1.65f, 0.046889f, 0.85f);
-        antInstance.transform.rotation = Quaternion.Euler(0f, 180f, 0f); // Quay mặt về phía người chơi
+        antInstance.transform.position = new Vector3(1.65f, 0.046889f, 1.35f);
+        antInstance.transform.rotation = Quaternion.Euler(0f, 0f, 0f); // Quay mặt vào phía sau lãnh thổ của nó
         antInstance.transform.localScale = new Vector3(0.04f, 0.04f, 0.04f); // Tỷ lệ mini vừa vặn với căn phòng
 
         // 4. Cấu hình Animator
@@ -96,8 +100,8 @@ public class SetupAntEnemy
         EnemyAI ai = antInstance.GetComponent<EnemyAI>();
         if (ai == null) ai = antInstance.AddComponent<EnemyAI>();
 
-        ai.maxHealth = 50f;
-        ai.currentHealth = 50f;
+        ai.maxHealth = 100f;
+        ai.currentHealth = 100f;
         ai.patrolSpeed = 0.15f;
         ai.chaseSpeed = 0.32f;
         ai.rotationSpeed = 5f;

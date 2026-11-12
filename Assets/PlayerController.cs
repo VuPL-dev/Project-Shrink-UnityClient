@@ -129,6 +129,18 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // Phím tắt chuyển nhanh giữa Phòng 1 (SampleScene) và Phòng 4 (Room4_Security)
+        if (Input.GetKeyDown(KeyCode.F4))
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene("Room4_Security");
+            return;
+        }
+        if (Input.GetKeyDown(KeyCode.F1))
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene("SampleScene");
+            return;
+        }
+
         // 0. Khi đang mở Túi đồ hoặc Bàn chế tạo, tạm dừng di chuyển và đòn đánh để dùng chuột
         if (InventoryManager.Instance != null && InventoryManager.Instance.isInventoryOpen)
         {
